@@ -609,7 +609,6 @@ grammar NQP::Grammar is HLL::Grammar {
           {
               my $sym      := $<sym> ?? ~$<sym> !! 'token';
               my $name_ast := $<deflongname> && $<deflongname>.ast || $<shortname> && $<shortname>.ast;
-              say($<deflongname> // $<shortname>);
               %*RX<s>      := $sym eq 'rule';
               %*RX<r>      := $sym eq 'token' || $<sym> eq 'rule';
               %*RX<name>   := $name_ast  ?? $name_ast !! "!!LATENAME!!" ~ ~$<latename>;
