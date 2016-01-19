@@ -46,6 +46,9 @@ class NQP::Actions is HLL::Actions {
              !! ~$/;
     }
 
+    # TBD what if $s contains both bracket types?
+    sub brackets($s) { $s ~~ /<[ < > ]>/ ?? '«' ~ $s ~ '»' !! '<' ~ $s ~ '>';    }
+
     sub colonpair_str($ast) {
 	my $s;
         if nqp::istype($ast, QAST::Op) {
@@ -55,6 +58,7 @@ class NQP::Actions is HLL::Actions {
         } else {
             $s := $ast.value
         }
+        brackets($s);
 	$s ~~ /<[ < > ]>/ ?? '«' ~ $s ~ '»' !! '<' ~ $s ~ '>';
     }
 
@@ -1291,10 +1295,19 @@ class NQP::Actions is HLL::Actions {
         $/.prune;
     }
 
+    method shortname($/) {
+        my $name := $<name1> ?? "$<name> $<name1>" !! ~$<name>;
+        $name :=  "$<category>:sym" ~ brackets($name);
+        make $name;
+    }
+
     method regex_declarator($/, $key?) {
         my $name;
         if $<deflongname> {
             $name := ~$<deflongname>.ast;
+        }
+        elsif $<shortname> {
+            $name := ~$<shortname>.ast;
         }
         else {
             if $*PKGDECL ne 'role' {
@@ -1339,6 +1352,9 @@ class NQP::Actions is HLL::Actions {
                 # since it's reachable through the method table.
                 $block.blocktype('declaration_static');
                 $*W.pkg_add_method($*PACKAGE, 'add_method', $name, $code);
+                $*W.pkg_add_method($*PACKAGE, 'add_method', $<shortname><name>, $code)
+                    if $<shortname> && !$<shortname><name1>;
+
             }
 
             # If this appears in a role, its NFA may depend on generic args.

@@ -575,6 +575,13 @@ grammar NQP::Grammar is HLL::Grammar {
     proto rule trait_mod { <...> }
     rule trait_mod:sym<is> { <sym> <longname=.deflongname><circumfix>**0..1 }
 
+# need better name for that rule
+    token  shortname {
+        |  $<category>=[term|infix|prefix|postfix]   \s+ $<name>=\S+
+        |  $<category>=[postcircumfix|circumfix] \s+ $<name>=\S+ $<name1>=\S+
+    }
+
+
     rule regex_declarator {
         [
         | [$<proto>=[proto]] [regex|token|rule]
@@ -588,19 +595,25 @@ grammar NQP::Grammar is HLL::Grammar {
           || '{' '<*>' '}'<?ENDSTMT>
           || <.panic: "Proto regex body must be \{*\} (or <*> or <...>, which are deprecated)">
           ]
-        | [$<sym>=[regex|token|rule]]
-          [
-          || '::(' <latename=variable> ')'
-          || <deflongname>
+         | [
+           ||  [$<sym>=[regex|token|rule]]?  <shortname>
+           ||  [$<sym>=[regex|token|rule]]
+               [
+               || '::(' <latename=variable> ')'
+               || <deflongname>
+               ]
           ]
           <.newpad>
           [ '(' ~ ')' <signature> ]**0..1
           :my %*RX;
           {
-              %*RX<s>    := $<sym> eq 'rule';
-              %*RX<r>    := $<sym> eq 'token' || $<sym> eq 'rule';
-              %*RX<name> := $<deflongname> ?? $<deflongname>.made !! "!!LATENAME!!" ~ ~$<latename>;
-              %*RX<code> := $*W.create_code($*W.cur_lexpad(), %*RX<name>, 0, :code_type_name<NQPRegex>);
+              my $sym      := $<sym> ?? ~$<sym> !! 'token';
+              my $name_ast := $<deflongname> && $<deflongname>.ast || $<shortname> && $<shortname>.ast;
+              say($<deflongname> // $<shortname>);
+              %*RX<s>      := $sym eq 'rule';
+              %*RX<r>      := $sym eq 'token' || $<sym> eq 'rule';
+              %*RX<name>   := $name_ast  ?? $name_ast !! "!!LATENAME!!" ~ ~$<latename>;
+              %*RX<code>   := $*W.create_code($*W.cur_lexpad(), %*RX<name>, 0, :code_type_name<NQPRegex>);
           }
           '{'<p6regex=.LANG('Regex','nibbler')>'}'<?ENDSTMT>
         ]
@@ -881,4 +894,3 @@ grammar NQP::Regex is QRegex::P6Regex::Grammar {
         <quote_EXPR=.LANG('MAIN','quote_EXPR')>
     }
 }
-
