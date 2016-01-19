@@ -445,6 +445,8 @@ class NQP::Actions is HLL::Actions {
         $/.prune();
     }
 
+    method statement_prefix:sym<AST>($/) { make $<ast_def>.ast; }
+
     method blorst($/) {
         make $<block>
              ?? block_immediate($<block>.ast)
@@ -1010,6 +1012,8 @@ class NQP::Actions is HLL::Actions {
         $/.prune;
     }
 
+    method ast_def($/) {   make $<ast_def>.ast;  }
+    
     method method_def($/) {
         # If it's just got * as a body, make a multi-dispatch enterer.
         # Otherwise, build method block QAST.

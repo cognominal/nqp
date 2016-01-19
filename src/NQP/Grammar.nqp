@@ -6,6 +6,8 @@ grammar NQP::Grammar is HLL::Grammar {
         %*LANG<Regex-actions> := NQP::RegexActions;
         %*LANG<MAIN>          := NQP::Grammar;
         %*LANG<MAIN-actions>  := NQP::Actions;
+        %*LANG<AST>           := AST::Grammar;
+        %*LANG<AST-actions>   := AST::Actions;
 
         # Package declarator to meta-package mapping. Note that there is
         # one universal KnowHOW from the 6model core, and an attribute
@@ -276,6 +278,8 @@ grammar NQP::Grammar is HLL::Grammar {
     token statement_prefix:sym<INIT>  { <sym> <blorst> }
     token statement_prefix:sym<try>   { <sym> <blorst> }
 
+    token statement_prefix:sym<AST>   { <sym> <ast_def>  }
+
     token blorst {
         [
         | <?before \s> <.ws>
@@ -503,6 +507,7 @@ grammar NQP::Grammar is HLL::Grammar {
         | <blockoid>
         ]
     }
+    rule ast_def { <ast_def=.LANG('AST', 'TOP')>   }
 
     rule method_def {
         :my $*RETURN_USED := 0;
