@@ -578,7 +578,7 @@ grammar NQP::Grammar is HLL::Grammar {
 # need better name for that rule
     token  shortname {
         |  $<category>=[term|infix|prefix|postfix]   \s+ $<name>=\S+
-        |  $<category>=[postcircumfix|circumfix] \s+ $<name>=\S+ $<name1>=\S+
+        |  $<category>=[postcircumfix|circumfix] \s+ $<name>=\S+ \s+ $<name1>=\S+
     }
 
 
