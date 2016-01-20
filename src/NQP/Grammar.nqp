@@ -736,15 +736,29 @@ grammar NQP::Grammar is HLL::Grammar {
         <O('%methodop')>
     }
 
+    token postcircumfix:sym<-[ ]> {
+        '-[' <.ws> <EXPR> ']'
+        <O('%methodop')>
+    }
+
     token postcircumfix:sym<{ }> {
         '{' <.ws> <EXPR> '}'
         <O('%methodop')>
     }
-
+    token postcircumfix:sym<-{ }> {
+        '-{' <.ws> <EXPR> '}'
+        <O('%methodop')>
+    }
     token postcircumfix:sym<ang> {
         <?[<]> <quote_EXPR: ':q'>
         <O('%methodop')>
     }
+
+    token postcircumfix:sym<-ang> {
+        '-' <?[<]> <quote_EXPR: ':q'>
+        <O('%methodop')>
+    }
+
 
     token postcircumfix:sym<( )> {
         '(' <.ws> <arglist> ')'

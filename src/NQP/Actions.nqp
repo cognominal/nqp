@@ -1581,6 +1581,9 @@ class NQP::Actions is HLL::Actions {
     method postcircumfix:sym<[ ]>($/) {
         make QAST::VarWithFallback.new( :scope('positional'), $<EXPR>.ast, :fallback(default_for('$')) );
     }
+    method postcircumfix:sym<-[ ]>($/) {
+        make QAST::Var.new( :scope('positional'), $<EXPR>.ast);
+    }
 
     method postcircumfix:sym<{ }>($/) {
         make QAST::VarWithFallback.new( :scope('associative'), $<EXPR>.ast, :fallback(default_for('$')) );
@@ -1589,6 +1592,15 @@ class NQP::Actions is HLL::Actions {
     method postcircumfix:sym<ang>($/) {
         make QAST::VarWithFallback.new( :scope('associative'), $<quote_EXPR>.ast, :fallback(default_for('$')) );
     }
+
+    method postcircumfix:sym<-{ }>($/) {
+        make QAST::Var.new( :scope('associative'), $<EXPR>.ast );
+    }
+
+    method postcircumfix:sym<-ang>($/) {
+        make QAST::Var.new( :scope('associative'), $<quote_EXPR>.ast );
+    }
+
 
     method postcircumfix:sym<( )>($/) {
         make $<arglist>.ast;
