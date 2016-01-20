@@ -732,30 +732,30 @@ grammar NQP::Grammar is HLL::Grammar {
     }
 
     token postcircumfix:sym<[ ]> {
-        '[' <.ws> <EXPR> ']'
+        '[' <.ws> <EXPR> ']' [ <.ws>  ':' $<adverb>='exists' ]?
         <O('%methodop')>
     }
 
     token postcircumfix:sym<-[ ]> {
-        '-[' <.ws> <EXPR> ']'
+        '-[' <.ws> <EXPR> ']' [ <.ws>  ':' $<adverb>='exists' ]?
         <O('%methodop')>
     }
 
     token postcircumfix:sym<{ }> {
-        '{' <.ws> <EXPR> '}'
+        '{' <.ws> <EXPR> '}' [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
         <O('%methodop')>
     }
     token postcircumfix:sym<-{ }> {
-        '-{' <.ws> <EXPR> '}'
+        '-{' <.ws> <EXPR> '}' [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
         <O('%methodop')>
     }
     token postcircumfix:sym<ang> {
-        <?[<]> <quote_EXPR: ':q'>
+        <?[<]> <quote_EXPR: ':q'> [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
         <O('%methodop')>
     }
 
     token postcircumfix:sym<-ang> {
-        '-' <?[<]> <quote_EXPR: ':q'>
+        '-' <?[<]> <quote_EXPR: ':q'> [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
         <O('%methodop')>
     }
 
@@ -895,4 +895,3 @@ grammar NQP::Regex is QRegex::P6Regex::Grammar {
         <quote_EXPR=.LANG('MAIN','quote_EXPR')>
     }
 }
-

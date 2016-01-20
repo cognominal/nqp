@@ -1578,33 +1578,33 @@ class NQP::Actions is HLL::Actions {
 
     method semilist($/) { make $<statement>.ast; $/.prune; }
 
-    method postcircumfix:sym<[ ]>($/) {
-        make QAST::VarWithFallback.new( :scope('positional'), $<EXPR>.ast, :fallback(default_for('$')) );
-    }
-    method postcircumfix:sym<-[ ]>($/) {
-        make QAST::Var.new( :scope('positional'), $<EXPR>.ast);
-    }
-
-    method postcircumfix:sym<{ }>($/) {
-        make QAST::VarWithFallback.new( :scope('associative'), $<EXPR>.ast, :fallback(default_for('$')) );
-    }
-
-    method postcircumfix:sym<ang>($/) {
-        make QAST::VarWithFallback.new( :scope('associative'), $<quote_EXPR>.ast, :fallback(default_for('$')) );
+    method idx_pos($/, $fallback) {
+        if $<adverb> {
+             QAST::Op.new( :op<existspos>, $<EXPR>.ast );
+        } else {
+          $fallback ??
+              QAST::VarWithFallback.new( :scope('positional'), $<EXPR>.ast, :fallback(default_for('$')) ) !!
+              QAST::Var.new( :scope('positional'), $<EXPR>.ast);
+        }
     }
 
-    method postcircumfix:sym<-{ }>($/) {
-        make QAST::Var.new( :scope('associative'), $<EXPR>.ast );
+    method idx_assoc($/, $fallback, $ang) {
+        my $ast := ($ang ?? $<quote_EXPR> !! $<EXPR>).ast;
+        if $<adverb> -> $adverb {
+           QAST::Op.new( :op( $adverb eq 'exists' ?? 'existskey' !! 'deletekey'), $ast );
+        } else {
+           make $fallback ??
+               QAST::VarWithFallback.new( :scope('associative'), $ast, :fallback(default_for('$')) ) !!
+               QAST::Var.new( :scope('associative'), $ast );
+        }
     }
-
-    method postcircumfix:sym<-ang>($/) {
-        make QAST::Var.new( :scope('associative'), $<quote_EXPR>.ast );
-    }
-
-
-    method postcircumfix:sym<( )>($/) {
-        make $<arglist>.ast;
-    }
+    method postcircumfix:sym<[ ]> ($/) { make self.idx_pos:   $/, 1    }
+    method postcircumfix:sym<-[ ]>($/) { make self.idx_pos:   $/, 0    }
+    method postcircumfix:sym<{ }> ($/) { make self.idx_assoc: $/, 1, 0 }
+    method postcircumfix:sym<ang> ($/) { make self.idx_assoc: $/, 1, 1 }
+    method postcircumfix:sym<-{ }>($/) { make self.idx_assoc: $/, 0, 0 }
+    method postcircumfix:sym<-ang>($/) { make self.idx_assoc: $/, 0, 1 }
+    method postcircumfix:sym<( )> ($/) { make $<arglist>.ast;          }
 
     method value($/) {
         make $<quote> ?? $<quote>.ast !! $<number>.ast;
