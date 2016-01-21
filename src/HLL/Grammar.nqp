@@ -121,14 +121,14 @@ grammar HLL::Grammar {
     token charnames { [<.ws><charname><.ws>]+ % ',' }
     token charspec {
         [
-        | '[' <charnames> ']' 
+        | '[' <charnames> ']'
         | \d+ [ _ \d+]*
         | <control=[ ?..Z ]>
         | <.panic: 'Unrecognized \\c character'>
         ]
     }
 
-=begin 
+=begin
 
 =item O(spec [, save])
 
@@ -166,12 +166,12 @@ Currently the only pairs recognized have the form C< :pair >,
 C< :!pair >, and C<< :pair<strval> >>.
 
 =end
-    
+
     # This lexical holds the hash cache. Right now we have one
     # cache for all grammars; eventually we may need a way to
     # separate them out by cursor type.
     my %ohash;
-    
+
     method O(str $spec, $save?) {
         # See if we've already created a Hash for the current
         # specification string -- if so, use that.
@@ -191,7 +191,7 @@ C< :!pair >, and C<< :pair<strval> >>.
                 }
                 elsif $s eq ':' { # Parse whatever comes next like a pair.
                     $pos++;
-                  
+
                     # If the pair is of the form :!name, then reverse the value
                     # and skip the exclamation mark.
                     my $value := 1;
@@ -275,7 +275,7 @@ of the match.
         @args.push('"');
         nqp::die(join('', @args))
     }
-    
+
     method FAILGOAL($goal, $dba?) {
         unless $dba {
             $dba := nqp::getcodename(nqp::callercode());
@@ -296,7 +296,7 @@ position C<pos>.
     method peek_delimiters(str $target, int $pos) {
         # peek at the next character
         my str $start := nqp::substr($target, $pos, 1);
-    
+
         # colon, word and whitespace characters aren't valid delimiters
         if $start eq ':' {
             self.panic('Colons may not be used to delimit quoting constructs');
@@ -432,7 +432,7 @@ An operator precedence parser.
         my str $inassoc;
         my int $more_infix;
         my int $term_done;
-        
+
         while 1 {
             nqp::bindattr_i($here, $cursor_class, '$!pos', $pos);
             $termcur := $here."$termishrx"();
@@ -444,14 +444,14 @@ An operator precedence parser.
             }
 
             $termish := $termcur.MATCH();
-            
+
             # Interleave any prefix/postfix we might have found.
             %termOPER := $termish;
             %termOPER := nqp::atkey(%termOPER, 'OPER')
                 while nqp::existskey(%termOPER, 'OPER');
             @prefixish  := nqp::atkey(%termOPER, 'prefixish');
             @postfixish := nqp::atkey(%termOPER, 'postfixish');
- 
+
             unless nqp::isnull(@prefixish) || nqp::isnull(@postfixish) {
                 while @prefixish && @postfixish {
                     my %preO     := @prefixish[0]<OPER><O>;
@@ -478,10 +478,10 @@ An operator precedence parser.
                 nqp::push(@opstack, nqp::shift(@prefixish)) while @prefixish;
                 nqp::push(@opstack, nqp::pop(@postfixish)) while @postfixish;
             }
-            nqp::deletekey($termish, 'prefixish');            
+            nqp::deletekey($termish, 'prefixish');
             nqp::deletekey($termish, 'postfixish');
             nqp::push(@termstack, nqp::atkey($termish, 'term'));
-        
+
             last if $noinfix;
 
             $more_infix := 1;
@@ -496,7 +496,7 @@ An operator precedence parser.
                     $term_done := 1;
                     last;
                 }
-        
+
                 # Next, try the infix itself.
                 nqp::bindattr_i($here, $cursor_class, '$!pos', $pos);
                 $infixcur := $here.infixish();
@@ -506,7 +506,7 @@ An operator precedence parser.
                     last;
                 }
                 $infix := $infixcur.MATCH();
-    
+
                 # We got an infix.
                 %inO := $infix<OPER><O>;
                 $termishrx := nqp::ifnull(nqp::atkey(%inO, 'nextterm'), 'termish');
@@ -535,7 +535,7 @@ An operator precedence parser.
                 }
             }
             last if $term_done;
-        
+
             # if equal precedence, use associativity to decide
             if $opprec eq $inprec {
                 $inassoc := nqp::atkey(%inO, 'assoc');
@@ -554,7 +554,7 @@ An operator precedence parser.
                     self.EXPR_nonassoc($infixcur, $op1, $op2) if $op1 ne $op2 && $op1 ne ':';
                 }
             }
-            
+
             nqp::push(@opstack, $infix); # The Shift
             nqp::bindattr_i($here, $cursor_class, '$!pos', $pos);
             $wscur := $here.ws();
@@ -562,7 +562,7 @@ An operator precedence parser.
             nqp::bindattr_i($here, $cursor_class, '$!pos', $pos);
             return $here if $pos < 0;
         }
-        
+
         self.EXPR_reduce(@termstack, @opstack) while @opstack;
         $pos := nqp::getattr_i($here, $cursor_class, '$!pos');
         $here := self.'!cursor_start_cur'();
@@ -573,9 +573,9 @@ An operator precedence parser.
         $here;
     }
 
-    method EXPR_reduce(@termstack, @opstack) { 
+    method EXPR_reduce(@termstack, @opstack) {
         my $op := nqp::pop(@opstack);
-        
+
         # Give it a fresh capture list, since we'll have assumed it has
         # no positional captures and not taken them.
         nqp::bindattr($op, NQPCapture, '@!array', nqp::list());
@@ -595,7 +595,7 @@ An operator precedence parser.
         elsif $opassoc eq 'list' {
             $sym := nqp::ifnull(nqp::atkey(%opOPER, 'sym'), '');
             nqp::unshift($op, nqp::pop(@termstack));
-            while @opstack {    
+            while @opstack {
                 last if $sym ne nqp::ifnull(
                     nqp::atkey(nqp::atkey(nqp::atpos(@opstack,
                         nqp::elems(@opstack) - 1), 'OPER'), 'sym'), '');
@@ -615,7 +615,7 @@ An operator precedence parser.
         self.'!reduce_with_match'('EXPR', $key, $op);
         nqp::push(@termstack, $op);
     }
-    
+
     method EXPR_nonassoc($cur, $op1, $op2) {
         $cur.panic('"' ~ $op1 ~ '" and "' ~ $op2 ~ '" are non-associative and require parens');
     }
@@ -641,7 +641,7 @@ An operator precedence parser.
             $cur
         }
     }
-    
+
     method MARKED(str $markname) {
         my %markhash := nqp::getattr(
             nqp::getattr(self, $cursor_class, '$!shared'),
@@ -653,12 +653,18 @@ An operator precedence parser.
         $cur
     }
 
-    method LANG($lang, $regex, *@args) {
+
+    method LANG($lang, $regex, *@args, :$actions) {
         my $lang_cursor := %*LANG{$lang}.'!cursor_init'(self.orig(), :p(self.pos()), :shared(self.'!shared'()));
         if self.HOW.traced(self) {
             $lang_cursor.HOW.trace-on($lang_cursor, self.HOW.trace_depth(self));
         }
-        my $*ACTIONS    := %*LANG{$lang ~ '-actions'};
+        my $*ACTIONS;
+        if  $actions =:= Mu {
+            $*ACTIONS    := %*LANG{$lang ~ '-actions'};
+        } elsif nqp::can($actions,  'new') { # it is a class
+            $*ACTIONS := $actions
+        }
         $lang_cursor."$regex"(|@args);
     }
 }
