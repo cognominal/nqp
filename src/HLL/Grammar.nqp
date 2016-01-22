@@ -347,6 +347,10 @@ position C<pos>.
                     %*QUOTEMOD{'s'} := $TRUE;
                     %*QUOTEMOD{'a'} := $TRUE;
                     %*QUOTEMOD{'h'} := $TRUE;
+                    %*QUOTEMOD{'S'} := $TRUE;
+                    %*QUOTEMOD{'A'} := $TRUE;
+                    %*QUOTEMOD{'H'} := $TRUE;
+                    %*QUOTEMOD{'f'} := $TRUE;
                     %*QUOTEMOD{'f'} := $TRUE;
                     %*QUOTEMOD{'c'} := $TRUE;
                     %*QUOTEMOD{'b'} := $TRUE;

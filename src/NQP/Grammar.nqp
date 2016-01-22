@@ -1,13 +1,19 @@
+
 grammar NQP::Grammar is HLL::Grammar {
     method TOP() {
         # Language braids.
         my %*LANG;
-        %*LANG<Regex>         := NQP::Regex;
-        %*LANG<Regex-actions> := NQP::RegexActions;
-        %*LANG<MAIN>          := NQP::Grammar;
-        %*LANG<MAIN-actions>  := NQP::Actions;
-        %*LANG<AST>           := AST::Grammar;
-        %*LANG<AST-actions>   := AST::Actions;
+        %*LANG<Regex>            := NQP::Regex;
+        %*LANG<Regex-actions>    := NQP::RegexActions;
+        %*LANG<MAIN>             := NQP::Grammar;
+        %*LANG<MAIN-actions>     := NQP::Actions;
+        %*LANG<AST>              := AST::Grammar;
+        %*LANG<AST-actions>      := AST::Actions;
+        %*LANG<HL-Var>           := AST::HL-Var;
+        %*LANG<HL-Var-actions>   := AST::HL-Var-Actions;
+        %*LANG<SL-Var>           := AST::SL-Var;
+        %*LANG<SL-Var-actions>   := AST::SL-Var-Actions;
+
 
         # Package declarator to meta-package mapping. Note that there is
         # one universal KnowHOW from the 6model core, and an attribute
@@ -886,4 +892,3 @@ grammar NQP::Regex is QRegex::P6Regex::Grammar {
         <quote_EXPR=.LANG('MAIN','quote_EXPR')>
     }
 }
-
