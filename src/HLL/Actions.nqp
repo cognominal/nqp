@@ -19,7 +19,7 @@ class HLL::Actions {
             nqp::chr($ints.made);
         }
     }
-    
+
     method CTXSAVE() {
         QAST::Stmts.new(
             QAST::Op.new(
@@ -45,7 +45,7 @@ class HLL::Actions {
                         QAST::Var.new( :name('ctxsave'), :scope('local')
                     )))))
     }
-   
+
     method SET_BLOCK_OUTER_CTX($block) {
         my $outer_ctx := %*COMPILING<%?OPTIONS><outer_ctx>;
         if nqp::defined($outer_ctx) {
@@ -81,14 +81,20 @@ class HLL::Actions {
         my $ast := $/.ast // $<OPER>.ast;
         unless $ast {
             $ast := QAST::Op.new( :node($/) );
+            if $key eq 'LIST' { $key := 'infix'; }
             if $<OPER><O><op> {
                 $ast.op( ~$<OPER><O><op> );
             }
-            if $key eq 'LIST' { $key := 'infix'; }
-            my $name := nqp::lc($key) ~ ':' ~ ($<OPER><sym> ~~ /<[ < > ]>/ ?? '«' ~ $<OPER><sym> ~ '»' !! '<' ~ $<OPER><sym> ~ '>');
-            $ast.name('&' ~ $name);
-            unless $ast.op {
-                $ast.op('call');
+            if $<OPER><O><aop> -> $op {
+                 $ast := QAST::Op.new( :op<callmethod>, :name<new>,
+                     QAST::WVal.new(:value(QAST::Op)),
+                     QAST::SVal.new(:named<op>, :value($op)));
+            } else {
+                my $name := nqp::lc($key) ~ ':' ~ ($<OPER><sym> ~~ /<[ < > ]>/ ?? '«' ~ $<OPER><sym> ~ '»' !! '<' ~ $<OPER><sym> ~ '>');
+                $ast.name('&' ~ $name);
+                unless $ast.op {
+                    $ast.op('call');
+                }
             }
         }
         if $key eq 'POSTFIX' {
@@ -128,7 +134,7 @@ class HLL::Actions {
                     $ast := QAST::SVal.new( :value(~@words[0]) );
                 }
             }
-            else {            
+            else {
                 $/.CURSOR.panic("Can't form :w list from non-constant strings (yet)");
             }
         }
