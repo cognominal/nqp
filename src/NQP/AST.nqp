@@ -61,12 +61,12 @@ grammar AST::Grammar is HLL::Grammar {
    }
 
 
-    rule TOP {  <.ws> <EXPR>                                                   }
-    token term:circumfix<{{ }}> { '{' [ <EXPR>? ] '}'                          }
-    token term:circumfix<{ }>   { '{' [ <EXPR>? ] '}'                          }
-    token term:circumfix<( )>   { '(' [ <EXPR>? ] ')'                          }
+    rule TOP {  :my $*AST := 1; <.ws> <EXPR>                                                   }
+    token circumfix:<{{ }}> { '{' [ <.ws> <EXPR>? ] '}'                        }
+    token circumfix:<{ }>   { '{' [ <.ws> <EXPR>? ] '}'                        }
+    token circumfix:<( )>   { '(' [ <.ws> <EXPR>? ] ')'                        }
     token infix:sym<:=>     { <sym>  <O('%assignment, :aop<bind>')>            }
-    token term:sym<nqp::op> { $<op>=<['a'..'z']>+                              }
+    token term:sym<nqp::op> { $<op>=<[a..z]>+                                  }
     token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                          }
     token args{ '(' <arglist> ')' | <arglist> | <?>                            }
     token term:sym<value> { <value>                                            }
@@ -75,24 +75,26 @@ grammar AST::Grammar is HLL::Grammar {
     rule  term:sym<decl-sl-var> { reg <sl-var>                                 }
     token term:sym<hl-var> { <hl-var>                                          }
     token term:sym<sl-var> { <sl-var>                                          }
-    proto token quote { <...>                                                  }
-    token quote:sym<dblq> { <?["]>         <quote_EXPR: ':qq'>                 }
-    token colonpair {  <LANG('MAIN', 'colonpair')>                             }
-    token sigil { <[$&%@]>                                                     }
-    token quote_escape:sym<$>    {  <?[$]>              <?quotemod_check('s')>  <al-var>    }
-    token quote_escape:sym<$$>   {  <?before '$$'> '$'  <?quotemod_check('S')>  <hl-var>    }
     token hl-var {          <?before <sigil> > <var=.LANG('MAIN', 'variable', :actions(AST::HL-Var-actions))> }
     token sl-var { <sigil>  <?before <sigil> >  <var=.LANG('MAIN', 'variable', :actions(AST::SL-Var-actions))> }
+    token colonpair {  <LANG('MAIN', 'colonpair')>                             }
+    token sigil { <[$&%@]>                                                     }
+    proto token quote { <...>                                                  }
+# don't yet support all quotes not to clutter the grammar
+    token quote:sym<apos> { <?[']>         <quote_EXPR: ':q'>                  }
+    token quote:sym<dblq> { <?["]>         <quote_EXPR: ':qq'>                 }
+    token quote_escape:sym<$>    {  <?[$]>              <?quotemod_check('s')>  <al-var>    }
+    token quote_escape:sym<$$>   {  <?before '$$'> '$'  <?quotemod_check('S')>  <hl-var>    }
 
 }
 
 class AST::Actions is HLL::Actions {
     method TOP($/) {   make $<EXPR>.ast;                                       }
     method circumfix:<{{ }}>($/) {
-         qqq('Block', $<EXPR>.ast )
+         make qqq('Block', $<EXPR>.ast )
     }
-    method circumfix:<{ }>($/) {  qqq('Stmts', $<EXPR>.ast)                         }
-    method circumfix:<( )>($/) {  $<EXPR>.ast                                        }
+    method circumfix:<{ }>($/) {  make qqq('Stmts', $<EXPR>.ast)               }
+    method circumfix:<( )>($/) {  make $<EXPR>.ast                             }
     method term:sym<value>($/) {  make $<value>.ast                            }
     method value($/) {  make $<quote> ?? $<quote>.ast !! $<number>.ast         }
     method term:sym<hl-var>($/) {  make $<hl-var>.ast                          }
@@ -110,5 +112,6 @@ class AST::Actions is HLL::Actions {
         my &fun := $is-num ??  &qqq-nval !! &qqq-ival;
         make &fun($val);
 
-   }
+    }
+    method quote:sym<apos>($/) { make qqq-sval($<quote_EXPR>.ast.value)         }
 }
