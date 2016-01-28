@@ -7,17 +7,21 @@ being a QAST tree/node
 
 =end pod
 
+sub what($v) { $v.HOW.name($v) }
+sub swhat($v, $s = '') { print("$s : ") if $s; say(what($v)) }
+
+
 # probably useless
 sub qqq-a-val($val) {
-     if nqp::isint($val) {
-        qast-ival($val)
-     } elsif nqp::isstr($val) {
-        qast-sval($val)
-     } elsif nqp::isnum($val) {
-        qast-nval($val)
-     } else {
-       qast-wval($val)
-     }
+    if nqp::isint($val) {
+     qast-ival($val)
+    } elsif nqp::isstr($val) {
+     qast-sval($val)
+    } elsif nqp::isnum($val) {
+     qast-nval($val)
+    } else {
+    qast-wval($val)
+    }
  }
 sub q-pair-name($val)     {  $val.named<name>;  $val  }
 sub q-pair-op($val)       {  $val.named<op>;    $val  }
@@ -44,7 +48,9 @@ sub qqq($class, *@args, :$node) {
 }
 
 class AST::HL-Var-actions {
-      method variable($/) {   make QAST::Var.new(:name(~$/), :scope<lexical>);  }
+    method variable($/) {
+        make QAST::Var.new(:name(~$/), :scope<lexical>);
+    }
 }
 
 class AST::SL-Var-actions {
@@ -56,53 +62,128 @@ class AST::SL-Var-actions {
 
 
 grammar AST::Grammar is HLL::Grammar {
-   INIT {
-      NQP::Grammar.O(':prec<i=>, :assoc<right>', '%assignment');
-   }
+    INIT {
+       NQP::Grammar.O(':prec<g=>, :assoc<list>, :nextterm<nulltermish>',  '%comma');
+       NQP::Grammar.O(':prec<i=>, :assoc<right>', '%assignment');
+       NQP::Grammar.O(':prec<r=>, :assoc<left>',  '%concatenation');
+    }
 
 
-    rule TOP {  :my $*AST := 1; <.ws> <EXPR>                                                   }
-    token circumfix:<{{ }}> { '{' [ <.ws> <EXPR>? ] '}'                        }
-    token circumfix:<{ }>   { '{' [ <.ws> <EXPR>? ] '}'                        }
-    token circumfix:<( )>   { '(' [ <.ws> <EXPR>? ] ')'                        }
-    token infix:sym<:=>     { <sym>  <O('%assignment, :aop<bind>')>            }
-    token term:sym<nqp::op> { $<op>=<[a..z]>+                                  }
-    token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                          }
-    token args{ '(' <arglist> ')' | <arglist> | <?>                            }
+    rule TOP {  :my $*AST := 1; <.ws> <EXPR>                                    }
+#    <statementlist>
+    proto token circumfix { <...> }
+    token circumfix:sym<{{ }}> { '{{' [ <.ws> <EXPR>? ] '}}'                   }
+    token circumfix:sym<{ }>   { '{' [ <.ws> <EXPR>? ] '}'                     }
+    token circumfix:sym<( )>   { '(' [ <.ws> <EXPR>? ] ')'                     }
+    token infix:sym<:=>   { <sym>  <O('%assignment, :aop<bind>')>              }
+    token infix:sym<~>    { <sym>  <O('%concatenation, :aop<concat>')>         }
+    token infix:sym<,>    { <sym>  <O('%comma, :aop<list>')>                   }
+    token term:sym<nqp::op> { <!before <declarator> >> > $<op>=<[a..z]>+ <args> }
+    token term:sym<fun>      { '&' <name> <args_>                               }
     token term:sym<value> { <value>                                            }
+    token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                          }
+    token args  { '(' <arglist> ')' | <arglist> | <?>                          }
+    token args_ { '(' <arglist> ')' | <arglist>                                }
     token value { <quote>| <number>                                            }
     token number  {  [$<min>='-']? <number=.LANG('MAIN', 'number')>            }
-    rule  term:sym<decl-sl-var> { reg <sl-var>                                 }
+    token declarator { reg }
+# :my *SCOPE := ~$<declarator>;
+    rule  term:sym<decl-sl-var> { <declarator>    <.ws> <sl-var>               }
     token term:sym<hl-var> { <hl-var>                                          }
     token term:sym<sl-var> { <sl-var>                                          }
     token hl-var {          <?before <sigil> > <var=.LANG('MAIN', 'variable', :actions(AST::HL-Var-actions))> }
     token sl-var { <sigil>  <?before <sigil> >  <var=.LANG('MAIN', 'variable', :actions(AST::SL-Var-actions))> }
+    token identifier { <.ident> [ <[\-']> <.ident> ]*                          }
+    token name { <identifier> ['::'<identifier>]*                              }
     token colonpair {  <LANG('MAIN', 'colonpair')>                             }
     token sigil { <[$&%@]>                                                     }
     proto token quote { <...>                                                  }
 # don't yet support all quotes not to clutter the grammar
     token quote:sym<apos> { <?[']>         <quote_EXPR: ':q'>                  }
     token quote:sym<dblq> { <?["]>         <quote_EXPR: ':qq'>                 }
-    token quote_escape:sym<$>    {  <?[$]>              <?quotemod_check('s')>  <al-var>    }
-    token quote_escape:sym<$$>   {  <?before '$$'> '$'  <?quotemod_check('S')>  <hl-var>    }
+    token quote_escape:sym<$>    {  <?[$]>     <?quotemod_check('s')>  <hl-var>}
+    token quote_escape:sym<$$>   {   <sl-var>  <?quotemod_check('S')>          }
 
+    proto token terminator { <...> }
+    token terminator:sym<;> { <?[;]> }
+    token terminator:sym<}> { <?[}]> }
+    token eat_terminator {
+        || ';'
+        || <?MARKED('endstmt')>
+        || <?terminator>
+        || $
+    }
+    rule statementlist {
+        ''
+        [
+        | $
+        | <?before <[\)\]\}]>>
+        | [ <statement> <.eat_terminator> ]*
+        ]
+    }
+    token statement($*LABEL = '') {
+        <!before <[\])}]> | $ >
+        [
+        | <EXPR> <.ws>
+            [
+            || <?MARKED('endstmt')>
+            || <statement_mod_cond> <statement_mod_loop>?
+            ]
+         ]
+    }
 }
 
 class AST::Actions is HLL::Actions {
     method TOP($/) {   make $<EXPR>.ast;                                       }
-    method circumfix:<{{ }}>($/) {
+    method circumfix:sym<{{ }}>($/) {
+
          make qqq('Block', $<EXPR>.ast )
     }
-    method circumfix:<{ }>($/) {  make qqq('Stmts', $<EXPR>.ast)               }
-    method circumfix:<( )>($/) {  make $<EXPR>.ast                             }
+    method circumfix:sym<{ }>($/) {  make qqq('Stmts', $<EXPR>.ast)            }
+    method circumfix:sym<( )>($/) {  make $<EXPR> ?? $<EXPR>.ast !! qqq-op('list')}
+    method term:sym<nqp::op>($/)  {
+        if $<args><arglist> -> $l {
+            my $ast := $l.ast;
+            if $ast[0].value =:= QAST::Op {
+                $ast[1] := qq-spair('op', $<op>);
+                make $ast;
+            } else {
+                make qqq-op($<op>, $ast)
+            }
+        } else {
+            make qqq-op($<op>)
+        }
+    }
+    method term:sym<fun>($/)  {
+        my  $pair-name := qq-pair-name('&' ~ $<name>);
+        if $<args><arglist> -> $l {
+            my $ast := $l.ast;
+            if $ast[0].value =:= QAST::Op {
+                my @from;
+                @from.push: $pair-name;
+                $ast[1] := qq-spair('op', 'call');
+                nqp::splice($ast, @from, 2, 0);
+                make $ast;
+            } else {
+                make qqq-op('call', $pair-name, $ast)
+            }
+        } else {
+            make qqq-op('call', $pair-name)
+        }
+    }
+
+    method arglist($/) {  make $<EXPR> ?? $<EXPR>.ast !! qqq-op('list');     }
+    method args($/) { make $<arglist>                                          }
     method term:sym<value>($/) {  make $<value>.ast                            }
     method value($/) {  make $<quote> ?? $<quote>.ast !! $<number>.ast         }
     method term:sym<hl-var>($/) {  make $<hl-var>.ast                          }
-    method hl-var($/) { make $<var>.ast                                        }
+    method hl-var($/) {
+        make $<var>.ast
+    }
     method term:sym<decl-sl-var>($/) {
         my $ast := $<sl-var>.ast;
-        $ast.push(  qq-spair('decl', 'local'));
-        $ast;
+        $ast.push(  qq-spair('decl', 'var'));
+        make $ast;
     }
     method term:sym<sl-var>($/) {  make $<sl-var>.ast                          }
     method sl-var($/) { make $<var>.ast                                        }
@@ -113,5 +194,44 @@ class AST::Actions is HLL::Actions {
         make &fun($val);
 
     }
-    method quote:sym<apos>($/) { make qqq-sval($<quote_EXPR>.ast.value)         }
+    method quote_delimited($/) {
+        my @parts;
+        my $lastlit := '';
+        for $<quote_atom> {
+            my $ast := $_.ast;
+            if !nqp::istype($ast, QAST::Node) {
+                $lastlit := $lastlit ~ $ast;
+            }
+            elsif nqp::istype($ast, QAST::SVal) {
+                $lastlit := $lastlit ~ $ast.value;
+            }
+            else {
+                if $lastlit gt '' {
+                    @parts.push(qqq-sval($lastlit));
+                }
+                @parts.push(nqp::istype($ast, QAST::Node)
+                    ?? $ast
+                    !! qqq-sval($ast));
+                $lastlit := '';
+            }
+        }
+        if $lastlit gt '' { @parts.push(qqq-sval($lastlit)); }
+        my $ast := @parts ?? @parts.shift !! qqq-sval('');
+        $ast := qqq-named-op('concat', $ast, @parts.shift) while @parts;
+        make $ast;
+    }
+    method quote:sym<apos>($/) { make $<quote_EXPR>.ast                        }
+    method quote_escape:sym<$>($/) {  make $<hl-var>.ast                       }
+    method quote_escape:sym<$$>($/) {  make $<sl-var>.ast                      }
+    method quote:sym<dblq>($/) { make $<quote_EXPR>.ast                        }
+
+    ### incomplete
+    method statement($/) {         make $<EXPR>.ast                            }
+    method statementlist($/) {
+      my $ast := qqq('Stmts'); # QAST::Stmts.new( :node($/) );
+      $ast.push: $_.ast for $<EXPR>;
+   }
+
+
+
 }

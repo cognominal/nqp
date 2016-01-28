@@ -602,7 +602,8 @@ class NQP::World is HLL::World {
     # Finds a symbol that has a known value at compile time from the
     # perspective of the current scope. Checks for lexicals, then if
     # that fails tries package lookup.
-    method find_sym(@name) {
+    method find_sym($name) {
+        my @name :=  $name ~~ NQPArray ?? $name !! [$name];
         # Make sure it's not an empty name.
         unless +@name { nqp::die("Cannot look up empty name"); }
 
