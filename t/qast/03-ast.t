@@ -1,12 +1,9 @@
-plan(25);
+plan(24);
 
-
-sub test($qast, &test) {
+sub test($qast, &test, $msg='') {
     $qast := QAST::Block.new($qast);
     my $code := nqp::getcomp('nqp').compile($qast, :from<ast>); # :optimize<off>);
-#    say("-------$code.dump()\n------");
-#    say($code.HOW.name($code));
-    &test($code());
+    ok(&test($code()), $msg);
 }
 
 
@@ -16,31 +13,33 @@ my $int;
 my $num;
 my $str;
 
-$int := AST +42;    ok( $int == 42    &&  nqp::isint($int), 'AST +42' );
+$int := AST +42;    ok( $int == 42    &&  nqp::isint($int), 'AST +42'  );
 $int := AST +-42;   ok( $int == -42   &&  nqp::isint($int), 'AST +-42' );
-$num := AST +42.0;  ok( $num == 42.0  &&  nqp::isnum($num), 'AST +42' );
+$num := AST +42.0;  ok( $num == 42.0  &&  nqp::isnum($num), 'AST +42'  );
 $num := AST +-42.0; ok( $num == -42.0 &&  nqp::isnum($num), 'AST +-42' );
 
-test((AST 42),   -> $v { ok(nqp::isint($v) && $v == 42,   'AST 42')    });
-test((AST -42),   -> $v { ok(nqp::isint($v) && $v == -42, 'AST -42')   });
-test((AST 42.0), -> $v { ok(nqp::isnum($v) && $v == 42.0, 'AST 42.0')  });
-test((AST '42'), -> $v { ok(nqp::isstr($v) && $v eq 42,   "AST '42'")  });
-test((AST "42"), -> $v { ok(nqp::isstr($v) && $v eq 42,   'AST "42"')  });
+#tok((AST 42),   -> $v { nqp::isint($v) && $v == 42 },   'AST 42');
 
-test((AST (42)), -> $v { ok(nqp::isint($v) && $v == 42, 'AST (42)')  });
-test((AST {42}), -> $v { ok(nqp::isint($v) && $v == 42, 'AST {42}')  });
-test((AST nan),  -> $v { ok(nqp::isnum($v) , 'AST nan')});
-test((AST nan()),  -> $v { ok(nqp::isnum($v) , 'AST nan()')});
+test((AST 42),       -> $v { nqp::isint($v) && $v == 42   }, 'AST 42');
+test((AST -42),      -> $v { nqp::isint($v) && $v == -42  }, 'AST -42');
+test((AST 42.0),     -> $v { nqp::isnum($v) && $v == 42.0 }, 'AST 42.0');
+test((AST '42'),     -> $v { nqp::isstr($v) && $v eq 42   }, "AST '42'");
+test((AST "42"),     -> $v { nqp::isstr($v) && $v eq 42   }, 'AST "42"');
+
+test((AST (42)),     -> $v { nqp::isint($v) && $v == 42   }, 'AST (42)');
+test((AST {42}),     -> $v { nqp::isint($v) && $v == 42   }, 'AST {42}');
+test((AST nan),      -> $v { nqp::isnum($v) } , 'AST nan' );
+test((AST nan()),    -> $v { nqp::isnum($v) }, 'AST nan()');
 # correct?
-test((AST nan ()),  -> $v { ok(nqp::isnum($v) , 'AST nan ()')});
-test((AST chr 42), -> $v { ok($v eq '*', 'AST chr 42')});
-test((AST chr(42)), -> $v { ok($v eq '*', 'AST chr(42)')});
-test((AST chr (42)), -> $v { ok($v eq '*', 'AST chr (42)')});
+test((AST nan ()),   -> $v { nqp::isnum($v) }, 'AST nan ()');
+test((AST chr 42),   -> $v { $v eq '*' }, 'AST chr 42');
+test((AST chr(42)),  -> $v { $v eq '*' }, 'AST chr(42)');
+test((AST chr (42)), -> $v { $v eq '*' }, 'AST chr (42)');
 
 
-test((AST concat 4, 2),  -> $v { ok(nqp::isstr($v) && $v eq '42' , 'AST concat 4, 2')});
-test((AST concat(4, 2)),  -> $v { ok(nqp::isstr($v) && $v eq '42' , 'AST concat(4, 2)')});
-test((AST concat (4, 2)),  -> $v { ok(nqp::isstr($v) && $v eq '42' , 'AST concat (4, 2)')});
+test((AST concat 4, 2),   -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat 4, 2'  );
+test((AST concat(4, 2)),  -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat(4, 2)' );
+test((AST concat (4, 2)), -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat (4, 2)');
 
 #test((AST IVal 42),   -> $v { ok(nqp::isint($v) && $v == 42,   'AST IVal 42')    });
 
@@ -65,8 +64,8 @@ my $ast2 := @a[0];
 ok($ast == 42, 'HL-var: AST $a[0]');
 
 
-
-ok("42$var" eq '4242', 'HL-var: AST "42$var"');
+my $ast3 := AST "42$var";
+# test($ast3, -> $v {ok($v eq '4242', 'HL-var: AST "42$var"')});
 
 
 $var := '$var-name';

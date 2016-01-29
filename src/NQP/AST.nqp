@@ -294,7 +294,7 @@ class AST::Actions is HLL::Actions {
         }
         if $lastlit gt '' { @parts.push(qqq-sval($lastlit)); }
         my $ast := @parts ?? @parts.shift !! qqq-sval('');
-        $ast := qqq-named-op('concat', $ast, @parts.shift) while @parts;
+        $ast := qqq-op('concat', $ast, @parts.shift) while @parts;
         make $ast;
     }
     method quote:sym<apos>($/) { make $<quote_EXPR>.ast                        }
