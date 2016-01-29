@@ -91,7 +91,15 @@ grammar AST::Grammar is HLL::Grammar {
     token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                          }
     token args  { '(' <arglist> ')' | <arglist> | <?>                          }
     token args_ { '(' <arglist> ')' | <arglist>                                }
-    token value { <quote>| <number>                                            }
+    token value { <str> | <number>                                             }
+    token str   {
+        :my $*SL_VAR_OK := 1;
+        [
+        | '~' { $*SL_VAR_OK := 0 }  <quote>
+        |                           <quote>
+        ]
+    }
+
     token number  {  [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>  }
     token declarator { reg }
 # :my *SCOPE := ~$<declarator>;
@@ -106,8 +114,8 @@ grammar AST::Grammar is HLL::Grammar {
     token sigil { <[$&%@]>                                                     }
     proto token quote { <...>                                                  }
 # don't yet support all quotes not to clutter the grammar
-    token quote:sym<apos> { <?[']>         <quote_EXPR: ':q'>                  }
-    token quote:sym<dblq> { <?["]>         <quote_EXPR: ':qq'>                 }
+    token quote:sym<apos> { <?[']>  <quote_EXPR: ':q'>                          }
+    token quote:sym<dblq> { <?["]>  <quote_EXPR: $*SL_VAR_OK ?? ':qq' !! ':qq:S:A:H'> }
     token quote_escape:sym<$>    {  <?[$]>     <?quotemod_check('s')>  <hl-var>}
     token quote_escape:sym<$$>   {   <sl-var>  <?quotemod_check('S')>          }
 
@@ -239,7 +247,7 @@ class AST::Actions is HLL::Actions {
     method args($/) { make $<arglist>.ast;                                     }
     method term:sym<value>($/) {  make $<value>.ast                            }
     method term:sym<colonpair>($/) { make $<colonpair>.ast                     }
-    method value($/) {  make $<quote> ?? $<quote>.ast !! $<number>.ast         }
+    method value($/) {  make $<str> ?? $<str>.ast !! $<number>.ast             }
     method term:sym<hl-var>($/) {  make $<hl-var>.ast                          }
     method hl-var($/) {
         make $<var>.ast
@@ -262,6 +270,7 @@ class AST::Actions is HLL::Actions {
             make &fun($val);
         }
     }
+    method str($/) {  make $<quote>.ast }
     method quote_delimited($/) {
         my @parts;
         my $lastlit := '';

@@ -1,5 +1,4 @@
-
-plan(20);
+plan(25);
 
 
 sub test($qast, &test) {
