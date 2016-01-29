@@ -92,7 +92,7 @@ grammar AST::Grammar is HLL::Grammar {
     token args  { '(' <arglist> ')' | <arglist> | <?>                          }
     token args_ { '(' <arglist> ')' | <arglist>                                }
     token value { <quote>| <number>                                            }
-    token number  {  [$<min>='-']? <number=.LANG('MAIN', 'number')>            }
+    token number  {  [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>  }
     token declarator { reg }
 # :my *SCOPE := ~$<declarator>;
     rule  term:sym<decl-sl-var> { <declarator>    <.ws> <sl-var>               }
@@ -252,11 +252,15 @@ class AST::Actions is HLL::Actions {
     method term:sym<sl-var>($/) {  make $<sl-var>.ast                          }
     method sl-var($/) { make $<var>.ast                                        }
     method number($/) {
-        my $is-num   := nqp::index(~$/, '.') >= 0;
-        my $val      := $<min> ?? -$/ !! +$/;
-        my &fun := $is-num ??  &qqq-nval !! &qqq-ival;
-        make &fun($val);
-
+        my $is-num   := nqp::index(~$<num>, '.') >= 0;
+        my $val      := $<min> ?? -$<num> !! +$<num>;
+        if $<prefix> {
+            my $ast :=  ($is-num ?? QAST::NVal !! QAST::IVal).new(:value($val));
+            make $ast;
+        } else {
+            my &fun := $is-num ??  &qqq-nval !! &qqq-ival;
+            make &fun($val);
+        }
     }
     method quote_delimited($/) {
         my @parts;
