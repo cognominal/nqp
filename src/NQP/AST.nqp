@@ -41,6 +41,7 @@ sub qqq-wval($val) { qqq-val(QAST::WVal, $val) }
 sub qqq-op($op, *@args, :$node)              {     qqq('Op', qq-spair('op',   $op), |@args) }
 sub qqq-named-op($op, $nm, *@args, :$node)   {  qqq-op($op,  qq-spair('name', $nm), |@args) }
 sub qqq($class, *@args, :$node) {
+     $class := ~$class if $class ~~ NQPMatch;
      $class := $*W.find_sym(['QAST', $class]) if nqp::isstr($class);
      QAST::Op.new( :op<callmethod>, :name<new>,
         QAST::WVal.new(:value($class )),
@@ -63,14 +64,18 @@ class AST::SL-Var-actions {
 
 grammar AST::Grammar is HLL::Grammar {
     INIT {
-       NQP::Grammar.O(':prec<g=>, :assoc<list>, :nextterm<nulltermish>',  '%comma');
-       NQP::Grammar.O(':prec<i=>, :assoc<right>', '%assignment');
-       NQP::Grammar.O(':prec<r=>, :assoc<left>',  '%concatenation');
+       AST::Grammar.O(':prec<y=>, :assoc<unary>', '%methodop');
+       AST::Grammar.O(':prec<g=>, :assoc<list>, :nextterm<nulltermish>',  '%comma');
+       AST::Grammar.O(':prec<i=>, :assoc<right>', '%assignment');
+       AST::Grammar.O(':prec<r=>, :assoc<left>',  '%concatenation');
     }
 
 
     rule TOP {  :my $*AST := 1; <.ws> <EXPR>                                    }
 #    <statementlist>
+    token term:sym<node> {
+        $<name>=[ 'Rx-' $<type>=\w+ ['-' $<subtype>=\w+]? || <[A..Z]> \w+ ] <args>
+    }
     proto token circumfix { <...> }
     token circumfix:sym<{{ }}> { '{{' [ <.ws> <EXPR>? ] '}}'                   }
     token circumfix:sym<{ }>   { '{' [ <.ws> <EXPR>? ] '}'                     }
@@ -81,6 +86,8 @@ grammar AST::Grammar is HLL::Grammar {
     token term:sym<nqp::op> { <!before <declarator> >> > $<op>=<[a..z]>+ <args> }
     token term:sym<fun>      { '&' <name> <args_>                               }
     token term:sym<value> { <value>                                            }
+    token term:sym<colonpair> { <colonpair>                                    }
+#    token postfix:sym<.>  { <dotty> <O('%methodop')> }
     token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                          }
     token args  { '(' <arglist> ')' | <arglist> | <?>                          }
     token args_ { '(' <arglist> ')' | <arglist>                                }
@@ -131,6 +138,18 @@ grammar AST::Grammar is HLL::Grammar {
             ]
          ]
     }
+
+    token dotty {
+    [ '.' |  '->' ]
+    [ <longname=deflongname>
+#    | <?['"]> <quote>
+#        [ <?[(]> || <.panic: "Quoted method name requires parenthesized arguments"> ]
+    ]
+
+    [  <args> | ':' \s <args=.arglist> ]?
+}
+
+
 }
 
 class AST::Actions is HLL::Actions {
@@ -141,18 +160,40 @@ class AST::Actions is HLL::Actions {
     }
     method circumfix:sym<{ }>($/) {  make qqq('Stmts', $<EXPR>.ast)            }
     method circumfix:sym<( )>($/) {  make $<EXPR> ?? $<EXPR>.ast !! qqq-op('list')}
-    method term:sym<nqp::op>($/)  {
+    method term:sym<node>($/) {
+        my $ast;
+        if $<name> {
+            if ~$<name> eq 'Call' {
+
+            }
+            $ast := qqq($<name>);
+            $ast.push: $<args>.ast;
+        } else {
+            $ast := qqq('Regex', qq-spair('rxtype', $<type>));
+            $ast.push: qq-spair('subtype', $<subtype>)
+        }
+        make $ast;
+    }
+
+    sub op-with-args($/, $op)  {
+        nqp::die('$<args> missing>') unless $<args>;
+        $op := ~$op;
         if $<args><arglist> -> $l {
             my $ast := $l.ast;
             if $ast[0].value =:= QAST::Op {
-                $ast[1] := qq-spair('op', $<op>);
-                make $ast;
+                $ast[1] := qq-spair('op', $op);
+                $ast;
             } else {
-                make qqq-op($<op>, $ast)
+                qqq-op($op, $ast)
             }
         } else {
-            make qqq-op($<op>)
+            qqq-op($<op>)
         }
+
+    }
+
+    method term:sym<nqp::op>($/)  {
+        make op-with-args($/, $<op>);
     }
     method term:sym<fun>($/)  {
         my  $pair-name := qq-pair-name('&' ~ $<name>);
@@ -172,9 +213,45 @@ class AST::Actions is HLL::Actions {
         }
     }
 
-    method arglist($/) {  make $<EXPR> ?? $<EXPR>.ast !! qqq-op('list');     }
-    method args($/) { make $<arglist>                                          }
+
+    method postfix:sym<.>($/) {  make $<dotty>.ast }
+    method dotty($/) {
+        my $ast;
+        my  $pair-name := qq-pair-name('&' ~ $<name>);
+        if $<args><arglist> -> $l {
+            $ast := $l.ast;
+            if $ast[0].value =:= QAST::Op {
+                my @from;
+                @from.push: $pair-name;
+                $ast[1] := qq-spair('op', 'call');
+                nqp::splice($ast, @from, 2, 0);
+                make $ast;
+            } else {
+                make qqq-op('call', $pair-name, $ast)
+            }
+        } else {
+            make qqq-op('call', $pair-name)
+        }
+
+
+#        if $<quote> {
+#            $ast.unshift($<quote>.ast);
+#            $ast.op('callmethod');
+#        }
+#        else {
+            $ast.name(~$<longname>);
+            $ast.op('callmethod');
+#        }
+        make $ast;
+        $/.prune;
+
+    }
+
+
+    method arglist($/) {  make $<EXPR> ?? $<EXPR>.ast !! qqq-op('list');       }
+    method args($/) { make $<arglist>.ast;                                     }
     method term:sym<value>($/) {  make $<value>.ast                            }
+    method term:sym<colonpair>($/) { make $<colonpair>.ast                     }
     method value($/) {  make $<quote> ?? $<quote>.ast !! $<number>.ast         }
     method term:sym<hl-var>($/) {  make $<hl-var>.ast                          }
     method hl-var($/) {
@@ -231,7 +308,4 @@ class AST::Actions is HLL::Actions {
       my $ast := qqq('Stmts'); # QAST::Stmts.new( :node($/) );
       $ast.push: $_.ast for $<EXPR>;
    }
-
-
-
 }
