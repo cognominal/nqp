@@ -175,44 +175,31 @@ class AST::Actions is HLL::Actions {
         make $ast;
     }
 
-    sub op-with-args($/, $op)  {
+    sub op-args($/, $op, $pairs = [])  {
         nqp::die('$<args> missing>') unless $<args>;
+        my @pairs := $pairs ~~ NQPArray ?? $pairs !! [$pairs];
         $op := ~$op;
+        my $ast;
         if $<args><arglist> -> $l {
-            my $ast := $l.ast;
+            $ast := $l.ast;
             if $ast[0].value =:= QAST::Op {
+                # $<args>.ast generates a Op('call')
+                # change in place to make it an Op($op)
                 $ast[1] := qq-spair('op', $op);
                 $ast;
             } else {
-                qqq-op($op, $ast)
+                $ast := qqq-op($op, $ast);
             }
+            $ast.push: $_ for @pairs;
+            $ast;
         } else {
             qqq-op($<op>)
         }
 
     }
 
-    method term:sym<nqp::op>($/)  {
-        make op-with-args($/, $<op>);
-    }
-    method term:sym<fun>($/)  {
-        my  $pair-name := qq-pair-name('&' ~ $<name>);
-        if $<args><arglist> -> $l {
-            my $ast := $l.ast;
-            if $ast[0].value =:= QAST::Op {
-                my @from;
-                @from.push: $pair-name;
-                $ast[1] := qq-spair('op', 'call');
-                nqp::splice($ast, @from, 2, 0);
-                make $ast;
-            } else {
-                make qqq-op('call', $pair-name, $ast)
-            }
-        } else {
-            make qqq-op('call', $pair-name)
-        }
-    }
-
+    method term:sym<nqp::op>($/)  {  make op-args($/, $<op>); }
+    method term:sym<fun>($/)  { make op-args('call', qq-pair-name('&' ~ $<name>)); }
 
     method postfix:sym<.>($/) {  make $<dotty>.ast }
     method dotty($/) {
