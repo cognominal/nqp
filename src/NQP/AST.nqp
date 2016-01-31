@@ -29,6 +29,8 @@ sub q-pair-value($val)    {  $val.named<value>; $val  }
 sub q-pair($key, $val)    {  $val.named(~$key); $val  }
 
 sub qq-pair-name($val)    {  qq-spair('name', $val)                       }
+sub qq-pair-named($val)    {  qq-spair('named', $val)                       }
+sub qq-pair-value($val)    {  qq-spair('value', $val)                     }
 sub qq-spair($key, $val)  {  QAST::SVal.new(:named($key), :value(~$val))  }
 sub qq-npair($key, $val)  {  QAST::NVal.new(:named($key), :value(+$val))  }
 sub qq-ipair($key, $val)  {  QAST::IVal.new(:named($key), :value(+$val))  }
@@ -171,7 +173,11 @@ class AST::Actions is HLL::Actions {
     method term:sym<node>($/) {
         my $ast;
         if $<name> {
-            if ~$<name> eq 'Call' {
+            my $nm := ~$<name>;
+            if $nm ~~ / ^ <[ISNW]> Val $ / {
+
+
+            } elsif $nm eq 'Call' {
 
             }
             $ast := qqq($<name>);
@@ -184,11 +190,12 @@ class AST::Actions is HLL::Actions {
     }
 
     sub op-args($/, $op, $pairs = [])  {
-        nqp::die('$<args> missing>') unless $<args>;
+        my $args := $<args> // $<args_>;
+        nqp::die('$<args> missing>') unless $args;
         my @pairs := $pairs ~~ NQPArray ?? $pairs !! [$pairs];
         $op := ~$op;
         my $ast;
-        if $<args><arglist> -> $l {
+        if $args<arglist> -> $l {
             $ast := $l.ast;
             if $ast[0].value =:= QAST::Op {
                 # $<args>.ast generates a Op('call')
@@ -207,7 +214,7 @@ class AST::Actions is HLL::Actions {
     }
 
     method term:sym<nqp::op>($/)  {  make op-args($/, $<op>); }
-    method term:sym<fun>($/)  { make op-args('call', qq-pair-name('&' ~ $<name>)); }
+    method term:sym<fun>($/)  { make op-args($/, 'call', qq-pair-name('&' ~ $<name>)); }
 
     method postfix:sym<.>($/) {  make $<dotty>.ast }
     method dotty($/) {
@@ -282,6 +289,17 @@ class AST::Actions is HLL::Actions {
             elsif nqp::istype($ast, QAST::SVal) {
                 $lastlit := $lastlit ~ $ast.value;
             }
+# don't know how to handle the concat at compile time
+             elsif $ast.ann('typed') {
+                my $concat := QAST::Op.new(:op<concat>,
+                    QAST::SVal.new(:value($lastlit)), $ast);
+                $concat.named('value');
+                my $n := qqq(QAST::SVal, $concat);
+#                qq-pair-named('value'),
+                say($n.dump);
+                @parts.push: $n;
+                $lastlit := '';
+            }
             else {
                 if $lastlit gt '' {
                     @parts.push(qqq-sval($lastlit));
@@ -295,10 +313,23 @@ class AST::Actions is HLL::Actions {
         if $lastlit gt '' { @parts.push(qqq-sval($lastlit)); }
         my $ast := @parts ?? @parts.shift !! qqq-sval('');
         $ast := qqq-op('concat', $ast, @parts.shift) while @parts;
+        say($ast.dump);
         make $ast;
     }
     method quote:sym<apos>($/) { make $<quote_EXPR>.ast                        }
-    method quote_escape:sym<$>($/) {  make $<hl-var>.ast                       }
+    method quote_escape:sym<$>($/) {
+        my $var := ~$<hl-var>;
+        my %sym := $*W.find_sym($var, 0);
+        nqp::die("no hl-var '$var'") unless %sym;
+        my $type := %sym<type>;
+        if $type =:= str || $type =:= int {
+            my $ast := QAST::Var.new(:name($var), :scope<lexical>);
+            $ast.annotate('typed', 1);
+            make $ast;
+        } else {
+            make $<hl-var>.ast;
+        }
+    }
     method quote_escape:sym<$$>($/) {  make $<sl-var>.ast                      }
     method quote:sym<dblq>($/) { make $<quote_EXPR>.ast                        }
 

@@ -1,8 +1,11 @@
-plan(24);
-
+plan(25);
+use QAST;
 sub test($qast, &test, $msg='') {
     $qast := QAST::Block.new($qast);
-    my $code := nqp::getcomp('nqp').compile($qast, :from<ast>); # :optimize<off>);
+    my $comp := nqp::getcomp('nqp');
+    my $code := $comp.compile($qast, :from<ast>, :compunit_ok); # :optimize<off>);
+    $code := $comp.backend().compunit_mainline($code);
+    nqp::forceouterctx($code, nqp::ctxcaller(nqp::ctx));
     ok(&test($code()), $msg);
 }
 
@@ -62,12 +65,22 @@ ok($ast1 == 42, 'HL-var: AST $a.a');
 my @a := [42, 43];
 my $ast2 := @a[0];
 ok($ast == 42, 'HL-var: AST $a[0]');
+{
+  my $a := AST "42";
+  test((AST "42$a"), -> $v { nqp::isstr($v) && $v eq '4242'} , 'my $a := AST "42" AST "42$a"');
+}
+
+{
+  my str $a := "42";
+  test((AST "42$a"), -> $v { nqp::isstr($v) && $v eq '4242'} , 'my str $a := "42"; AST "42$a"');
+}
+#{
+#my str $ast := "toto";
+#my $ast3 := AST "42$ast";
+
+#test($ast3, -> $v {$v eq '4242'}, 'HL-var: AST "42$ast"');
 
 
-my $ast3 := AST "42$var";
-# test($ast3, -> $v {ok($v eq '4242', 'HL-var: AST "42$var"')});
-
-
-$var := '$var-name';
-$ast := AST $$var;
-ok( nqp::istype($ast, QAST::Var), 'AST $$var  is a QAST::Var' )
+#$var := '$var-name';
+#$ast := AST $$var;
+#ok( nqp::istype($ast, QAST::Var), 'AST $$var  is a QAST::Var' )
