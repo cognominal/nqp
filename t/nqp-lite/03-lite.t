@@ -1,9 +1,10 @@
-plan(10);
+plan(11);
 my @a;
 my %a;
 sub null($a, $msg) { ok($a.HOW.name($a) eq 'VMNull', $msg)  };
+ok( @a[0] ~~ NQPMu, '@a[0] ~~ NQPMu');
 null( @a-[0], 'unexistent @a-[0]');
-null( %a-<0>, 'unexitent %a-<0>');
+null( %a-<0>, 'unexistent %a-<0>');
 null( %a-{"0"}, 'unexistent %a-{"0"}');
 nqp::push(@a, 42);
 ok(@a-[0] == 42, '@a-[0]');
