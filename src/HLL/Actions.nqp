@@ -19,7 +19,7 @@ class HLL::Actions {
             nqp::chr($ints.made);
         }
     }
-    
+
     method CTXSAVE() {
         QAST::Stmts.new(
             QAST::Op.new(
@@ -45,7 +45,7 @@ class HLL::Actions {
                         QAST::Var.new( :name('ctxsave'), :scope('local')
                     )))))
     }
-   
+
     method SET_BLOCK_OUTER_CTX($block) {
         my $outer_ctx := %*COMPILING<%?OPTIONS><outer_ctx>;
         if nqp::defined($outer_ctx) {
@@ -78,6 +78,7 @@ class HLL::Actions {
 
     method EXPR($/, $key?) {
         unless $key { return 0; }
+        my $op := $<OPER>;
         my $ast := $/.ast // $<OPER>.ast;
         unless $ast {
             $ast := QAST::Op.new( :node($/) );
@@ -92,7 +93,7 @@ class HLL::Actions {
             }
         }
         if $key eq 'POSTFIX' {
-            $ast.unshift($/[0].ast);
+            $ast.unshift($/[0].ast) unless $<OPER><O><recall>;
         }
         else {
             for $/.list { if nqp::defined($_.ast) { $ast.push($_.ast); } }
@@ -128,7 +129,7 @@ class HLL::Actions {
                     $ast := QAST::SVal.new( :value(~@words[0]) );
                 }
             }
-            else {            
+            else {
                 $/.CURSOR.panic("Can't form :w list from non-constant strings (yet)");
             }
         }

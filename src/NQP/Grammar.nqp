@@ -741,29 +741,16 @@ grammar NQP::Grammar is HLL::Grammar {
         <O('%methodop')>
     }
 
-    token postcircumfix:sym<{ }> {
-        '{' <.ws> <EXPR> '}' [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
-        <O('%methodop')>
-    }
-    token postcircumfix:sym<-{ }> {
-        '-{' <.ws> <EXPR> '}' [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
-        <O('%methodop')>
-    }
-    token postcircumfix:sym<ang> {
-        <?[<]> <quote_EXPR: ':q'> [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
-        <O('%methodop')>
-    }
+# XXX why the [...] is needed ?
+    token ed {  <.ws>  ':' <( [exists|delete] )>  }
 
-    token postcircumfix:sym<-ang> {
-        '-' <?[<]> <quote_EXPR: ':q'> [ <.ws>  ':' $<adverb>=['exists'|'delete'] ]?
-        <O('%methodop')>
-    }
-
-
-    token postcircumfix:sym<( )> {
-        '(' <.ws> <arglist> ')'
-        <O('%methodop')>
-    }
+    token postcircumfix:sym<{ }>  { '{'  <.ws> <EXPR> '}'           <ed>?  <O('%methodop')> }
+    token postcircumfix:sym<-{ }> { '-{' <.ws> <EXPR> '}'           <ed>?  <O('%methodop')> }
+    token postcircumfix:sym<ang>  {     <?[<]> <quote_EXPR: ':q'>   <ed>?  <O('%methodop')> }
+    token postcircumfix:sym<-ang> { '-' <?[<]> <quote_EXPR: ':q'>   <ed>?  <O('%methodop')> }
+    token postcircumfix:sym<!ang> { '!' <?[<]> <quote_EXPR: ':q'>          <O('%methodop')> }
+    token postcircumfix:sym<!>    { '!'  <sigil> <identifier>             <O('%methodop, :recall')> }
+    token postcircumfix:sym<( )>  { '(' <.ws> <arglist> ')'                <O('%methodop')> }
 
     token postfix:sym<.>  { <dotty> <O('%methodop')> }
 

@@ -12,6 +12,7 @@ knowhow NQPClassHOW {
 
     # Attributes, methods, parents and roles directly added.
     has @!attributes;
+    has %!attributes;
     has %!methods;
     has @!method_order;
     has @!multi_methods_to_incorporate;
@@ -70,6 +71,7 @@ knowhow NQPClassHOW {
     method BUILD(:$name = '<anon>') {
         $!name := $name;
         @!attributes := nqp::list();
+        %!attributes := nqp::hash();
         %!methods := nqp::hash();
         @!method_order := nqp::list();
         @!multi_methods_to_incorporate := nqp::list();
@@ -132,6 +134,7 @@ knowhow NQPClassHOW {
             }
         }
         nqp::push(@!attributes, $meta_attr);
+        nqp::bindkey(%!attributes, $name, 1);
     }
 
     method add_parent($obj, $parent) {
@@ -649,7 +652,16 @@ knowhow NQPClassHOW {
         $!trace_depth
     }
 
-    method attributes($obj, :$local = 0) {
+
+    method attribute_class($obj, $attr-name) {
+        my @attrs := self.attributes($obj, :with-class);
+        for @attrs {
+            return $_[1] if $_[0] eq $attr-name;
+        }
+        return 0;
+    }
+
+    method attributes($obj, :$local = 0, :$with-class = 0) {
         my @attrs;
         if $local {
             for @!attributes {
@@ -657,9 +669,9 @@ knowhow NQPClassHOW {
             }
         }
         else {
-            for @!mro {
-                for $_.HOW.attributes($_, :local) {
-                    nqp::push(@attrs, $_);
+            for @!mro -> $class {
+                for $class.HOW.attributes($class, :local) {
+                    nqp::push(@attrs, $with-class ?? [$_, $class] !! $_);
                 }
             }
         }
@@ -818,7 +830,7 @@ knowhow NQPClassHOW {
             nqp::rebless($obj, $new_type) !!
             $new_type
     }
-    
+
     ##
     ## Tracing
     ##

@@ -1590,7 +1590,7 @@ class NQP::Actions is HLL::Actions {
 
     method idx_assoc($/, $fallback, $ang) {
         my $ast := ($ang ?? $<quote_EXPR> !! $<EXPR>).ast;
-        if $<adverb> -> $adverb {
+        if $<ed> -> $adverb {
            QAST::Op.new( :op( $adverb eq 'exists' ?? 'existskey' !! 'deletekey'), $ast );
         } else {
            make $fallback ??
@@ -1604,7 +1604,17 @@ class NQP::Actions is HLL::Actions {
     method postcircumfix:sym<ang> ($/) { make self.idx_assoc: $/, 1, 1 }
     method postcircumfix:sym<-{ }>($/) { make self.idx_assoc: $/, 0, 0 }
     method postcircumfix:sym<-ang>($/) { make self.idx_assoc: $/, 0, 1 }
+
+    method postcircumfix:sym<!>($/) {
+    }
+
+
     method postcircumfix:sym<( )> ($/) { make $<arglist>.ast;          }
+
+    method postcircumfix:sym<!ang>($/) {
+        my $attr-name := $<sigil> ~ '!' ~ $<name>
+    }
+
 
     method value($/) {
         make $<quote> ?? $<quote>.ast !! $<number>.ast;
