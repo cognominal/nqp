@@ -446,6 +446,7 @@ class NQP::Actions is HLL::Actions {
     }
 
     method statement_prefix:sym<AST>($/) { make $<ast_def>.ast; }
+    method statement_prefix:sym<ATM>($/) { make $<atm_def>.ast; }
 
     method blorst($/) {
         make $<block>

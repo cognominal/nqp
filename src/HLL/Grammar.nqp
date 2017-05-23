@@ -612,7 +612,7 @@ An operator precedence parser.
             $reducecheck := nqp::atkey(%opO, 'reducecheck');
             self."$reducecheck"($op) unless nqp::isnull($reducecheck);
             $key := 'INFIX';
-        }
+        } 
         self.'!reduce_with_match'('EXPR', $key, $op);
         nqp::push(@termstack, $op);
     }
@@ -654,18 +654,16 @@ An operator precedence parser.
         $cur
     }
 
+# We want to use the LANG grammar to parse but have our own action
+# Acting behind the LANG action
+ 
 
-    method LANG($lang, $regex, *@args, :$actions) {
+    method LANG($lang, $regex, *@args) {
         my $lang_cursor := %*LANG{$lang}.'!cursor_init'(self.orig(), :p(self.pos()), :shared(self.'!shared'()));
         if self.HOW.traced(self) {
             $lang_cursor.HOW.trace-on($lang_cursor, self.HOW.trace_depth(self));
         }
-        my $*ACTIONS;
-        if  $actions =:= Mu {
-            $*ACTIONS    := %*LANG{$lang ~ '-actions'};
-        } elsif nqp::can($actions,  'new') { # it is a class
-            $*ACTIONS := $actions
-        }
         $lang_cursor."$regex"(|@args);
     }
 }
+ 
