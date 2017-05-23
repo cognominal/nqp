@@ -9,6 +9,41 @@ sub test($qast, &test, $msg='') {
     ok(&test($code()), $msg);
 }
 
+sub d($v) {  say($v.dump) }
+
+#my $decl = QAST::Var.new(:name<$a>, :scope<lexical>, :decl<var));
+# my $assign AST $$a = 1
+# test((AST {{42}}), -> $v { ok(nqp::isint($v) && $v == 42, 'AST {{42}}')  });
+
+#test((AST 43),       -> $v { nqp::isint($v) && $v == 43}, 'AST 43');
+#say((AST 44).dump);
+
+# test((AST IVal +42),   -> $v { ok(nqp::isint($v) && $v == 42,       'AST IVal +42')    });
+
+#test((AST NVal +42.0),   -> $v { ok(nqp::isnum($v) && $v == 42.0,   'AST NVal 42.0')    });
+#test((AST SVal ~'42'),   -> $v { ok(nqp::isstr($v) && $v eq '42',   "AST SVal "42")    });
+
+my $ast; 
+d(AST 1); 
+# $ast := AST  $$b;
+# d($ast);
+class A {} ;
+d(AST A::);
+#ok($ast.name eq '$b', '$$b genvar name is \'$b\'');
+#ok($ast.scope eq 'local', '$$b default scope is \'local\'');
+#$ast := AST $$b :my;
+#ok($ast.scope eq 'lexical', '$$b explicit scope is \'lexical\'');
+# $ast := AST $$b :name('$foo');
+# say($ast.name);
+
+# $ast := AST NQPMu::;  
+# say($ast.dump); 
+
+#AST   :var;
+# AST  $$e :param;
+
+
+=begin END
 
 sub what($v) { $v.HOW.name($v) }
 sub swhat($v, $s = '') { print("$s : ") if $s; say(what($v)) }
@@ -20,6 +55,18 @@ $int := AST +42;    ok( $int == 42    &&  nqp::isint($int), 'AST +42'  );
 $int := AST +-42;   ok( $int == -42   &&  nqp::isint($int), 'AST +-42' );
 $num := AST +42.0;  ok( $num == 42.0  &&  nqp::isnum($num), 'AST +42'  );
 $num := AST +-42.0; ok( $num == -42.0 &&  nqp::isnum($num), 'AST +-42' );
+$str := AST ~"42"; ok( $str eq "42" &&  nqp::isstr($str), 'AST ~"42"' );
+
+macro a-test(} {
+#   AST
+}
+
+
+my $a := 42;
+my $str = AST ~$a; ok( $str eq "42" &&  nqp::isstr($str), 'my $a = 42; AST ~$a' );
+
+my $ast = AST 42;
+test((AST ~$ast),     -> $v { nqp::isstr($v) && $v eq 42   }, 'my $ast = AST ~$ast;');
 
 #tok((AST 42),   -> $v { nqp::isint($v) && $v == 42 },   'AST 42');
 
@@ -44,7 +91,8 @@ test((AST concat 4, 2),   -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat 4,
 test((AST concat(4, 2)),  -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat(4, 2)' );
 test((AST concat (4, 2)), -> $v { nqp::isstr($v) && $v eq '42'} , 'AST concat (4, 2)');
 
-#test((AST IVal 42),   -> $v { ok(nqp::isint($v) && $v == 42,   'AST IVal 42')    });
+
+test((AST IVal 42),   -> $v { ok(nqp::isint($v) && $v == 42,   'AST IVal 42')    });
 
 
 # test((AST &hash() ),  -> $v { ok($v ~~ BooTHash , 'AST nan')});
@@ -73,7 +121,7 @@ ok($ast == 42, 'HL-var: AST $a[0]');
 {
   my str $a := "42";
   test((AST "42$a"), -> $v { nqp::isstr($v) && $v eq '4242'} , 'my str $a := "42"; AST "42$a"');
-}
+} 
 #{
 #my str $ast := "toto";
 #my $ast3 := AST "42$ast";
@@ -84,3 +132,4 @@ ok($ast == 42, 'HL-var: AST $a[0]');
 #$var := '$var-name';
 #$ast := AST $$var;
 #ok( nqp::istype($ast, QAST::Var), 'AST $$var  is a QAST::Var' )
+=end END
