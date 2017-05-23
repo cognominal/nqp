@@ -1,0 +1,53 @@
+
+
+
+
+proto token circumfix      { <...>                                          }
+    proto token quote          { <...>                                          }
+#   token posfix:sym<annot>    { ':' $<key>= \w+                                }
+    token circumfix:sym<{{ }}> { '{{' [ <.ws> <EXPR>? ] '}}'                    }
+    token circumfix:sym<{ }>   { '{' [ <.ws> <EXPR>? ] '}'                      }
+    token circumfix:sym<( )>   { '(' [ <.ws> <EXPR>? ] ')'                      }
+    token infix:sym<:=>        { <sym>  <O('%assignment, :aop<bind>')>          }
+    token infix:sym<~>         { <sym>  <O('%concatenation, :aop<concat>')>     }
+    token infix:sym<,>         { <sym>  <O('%comma, :aop<list>')>               }
+    token term:sym<nqp::op> { <!before <declarator> >> > $<op>=<[a..z]>+ <args> }
+    token term:sym<fun>        { '&' <name> <args_>                             }
+    token term:sym<value>      { <value>                                        }
+    token term:sym<colonpair>  { <colonpair>                                    }
+#   token postfix:sym<.>  { <dotty> <O('%methodop')>                            }
+    token arglist {  <.ws>  [ <EXPR('f=')> | <?>    ]                           }
+    token args  { '(' <arglist> ')' | <arglist> | <?>                           }
+    token args_ { '(' <arglist> ')' | <arglist>                                 }
+    token value { <str> | <number>                                              }
+    token number  {  [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>  }
+    token declarator { reg }
+# :my *SCOPE := ~$<declarator>;
+    rule  term:sym<decl-sl-var> { <declarator>    <.ws> <sl-var>               }
+    token term:sym<hl-var> { <hl-var>                                          }
+    token term:sym<sl-var> { <sl-var>                                          }
+    token hl-var { <?before <sigil> > <var=.LANG('MAIN', 'variable', :actions(AST::HL-Var-actions))> }
+    token sl-var {
+        <sigil>  <?before <sigil> >  <var=.LANG('MAIN', 'variable', :actions(AST::SL-Var-actions))>
+ #       <?{ $<sigil> eq $<var><sigil> }> \s*
+         \s* [$<adverbs>=[':' \w+]]*  %% \s* 
+    }
+    token colonpair { :\w+ [ '<' '>' ]
+    token identifier { <.ident> [ <[\-']> <.ident> ]*                          }
+    token name { <identifier> ['::'<identifier>]*                              }
+    token colonpair {  <LANG('MAIN', 'colonpair')>                             }
+    token sigil { <[$&%@]>                                                     }
+# don't yet support all quotes not to clutter the grammar
+    token quote:sym<apos> { <?[']>  <quote_EXPR: ':q'>                          }
+    token quote:sym<dblq> { <?["]>  <quote_EXPR: $*SL_VAR_OK ?? ':qq' !! ':qq:S:A:H'> }
+    token quote_escape:sym<$>    {  <?[$]>     <?quotemod_check('s')>  <hl-var>}
+    token quote_escape:sym<$$>   {   <sl-var>  <?quotemod_check('S')>          }
+
+    token str   {
+        :my $*SL_VAR_OK := 1;
+        [
+        | '~' { $*SL_VAR_OK := 0 }  <quote>
+        |                           <quote>
+        ]
+    }
+

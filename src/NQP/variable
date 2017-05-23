@@ -1,0 +1,173 @@
+    method variable($/) {
+        my $ast;
+        if $<postcircumfix> {
+            $ast := $<postcircumfix>.ast;
+            $ast.unshift(QAST::VarWithFallback.new(
+                :name('$/'), :scope('lexical'), :fallback(default_for('$'))
+            ));
+        }
+        else {
+            my @name := NQP::Compiler.parse_name(~$/);
+            if +@name > 1 {
+                if $<twigil> {
+                    $/.CURSOR.panic("Twigil not allowed on multi-part name");
+                }
+                $ast := lexical_package_lookup(@name, $/);
+            }
+            elsif $<twigil> eq '*' {
+                my $global_fallback := die_s 'Contextual ' ~ ~$/ ~ ' not found' ifnull
+                    :op('ifnull'),
+                    lexical_package_lookup(['GLOBAL',  ~$<sigil> ~ $<desigilname>], $/),
+                    QAST::Op.new(
+                        :op('die_s'),
+                        QAST::SVal.new( :value('Contextual ' ~ ~$/ ~ ' not found') )
+                    ));
+                        Var :dyn :name(~@name.pop) = $global_fallback
+
+                );
+            }
+            elsif $<twigil> eq '!' {
+                my $name := ~@name.pop;
+                my $ch;
+                if $*PKGDECL eq 'role' {
+                    $ch := $?CLASS :typevar;
+                    $ch.set_compile_time_value($*PACKAGE);
+                }
+                else {
+                    $ch := WVal $*PACKAGE);
+                }
+                $ast := AST Var $name :attr decont Var self :lex
+                    :name($name), :scope('attribute'),
+                    QAST::Op.new( :op('decont'),
+                        QAST::Var.new( :name('self'), :scope('lexical') ) ),
+                    $ch
+                );
+
+                # Make sure the attribute exists and add type info.
+                unless $*IN_DECL {
+                    my $attr;
+                    for $*PACKAGE.HOW.attributes($*PACKAGE, :local(1)) {
+                        if $_.name eq $name {
+                            $attr := $_;
+                            last;
+                        }
+                    }
+                    if defined $attr {
+                        if can $attr, 'type' {
+                            $ast.returns($attr.type);
+                        }
+                    }
+                    else {
+                        $/.CURSOR.panic("Attribute '$name' not declared");
+                    }
+                }
+            }
+
+w
+
+    # Takes a multi-part name that we know is in a package and generates
+    # QAST to look it up using NQP package semantics.
+    sub lexical_package_lookup(@name, $/) {
+        # Catch empty names and die helpfully.
+
+        # Otherwise, see if the first part of the name is lexically
+        # known. If not, it's in GLOBAL. Also, if first part is GLOBAL
+        # then strip it off.
+        else {
+            my $path;
+            if $*W.is_lexical(@name[0]) {
+                try {
+                    my $first := @name.shift();
+                    $path := QAST::WVal.new( :value($*W.find_sym([$first])) );
+                    CATCH {
+                        $path := QAST::Var.new( :name($first), :scope('lexical') );
+                    }
+                }
+            }
+            else {
+                $path := QAST::WVal.new( :value($*GLOBALish) );
+            }
+            if @name[0] eq 'GLOBAL' {
+                @name.shift();
+            }
+            for @name {
+                my $path_temp := QAST::Node.unique('pkg_lookup_tmp');
+                $path := QAST::Stmts.new(
+                    QAST::Op.new(
+                        :op('bind'),
+                        QAST::Var.new( :name($path_temp), :scope('local'), :decl('var') ),
+                        $path
+                    ),
+                    QAST::Op.new(
+                        :op('if'),
+                        QAST::Op.new(
+                            :op('existskey'),
+                            QAST::Op.new( :op('who'), QAST::Var.new( :name($path_temp), :scope('local') ) ),
+                            QAST::SVal.new( :value(~$_) )
+                        ),
+                        QAST::Op.new(
+                            :op('atkey'),
+                            QAST::Op.new( :op('who'), QAST::Var.new( :name($path_temp), :scope('local') ) ),
+                            QAST::SVal.new( :value(~$_) )
+                        ),
+                        default_for('$')
+                    ));
+                $path := QAST::Op.new( :op('locallifetime'), $path, $path_temp );
+            }
+            $lookup.unshift(QAST::Op.new(:op('who'), $path));
+            my $sigil := nqp::substr(~$final_name, 0, 1);
+            if $sigil eq '@' || $sigil eq '%' {
+                my $viv_temp := QAST::Node.unique('pkg_viv_tmp');
+                $lookup[0] := QAST::Op.new(
+                    :op('bind'),
+                    QAST::Var.new( :name($viv_temp), :scope('local'), :decl('var') ),
+                    $lookup[0]);
+                $lookup.fallback(QAST::Op.new(
+                    :op('bindkey'),
+                    QAST::Var.new( :name($viv_temp), :scope('local') ),
+                    $lookup[1],
+                    default_for($sigil)
+                ));
+            }
+            else {
+                $lookup.fallback(default_for($sigil));
+            }
+        }
+
+        return $lookup;
+    }
+}
+
+
+    sub default_value_for_prim($prim) {
+        $prim == 1 ?? AST 0 !! $prim == 2 ?? AST0.0  !! AST ''
+    }
+
+
+
+    sub default_for($sigil) {
+        if $sigil eq '@' {        AST list
+        }  elsif $sigil eq '%' {  AST hash
+        }
+        else { AST WVal NQPMU || null
+            $default
+        }
+    }
+
+    sub default_for($sigil) {
+        if $sigil eq '@' {
+            QAST::Op.new( :op('list') )
+        }
+        elsif $sigil eq '%' {
+            QAST::Op.new( :op('hash') )
+        }
+        else {
+            my $default;
+            try {
+                $default := QAST::WVal.new( :value($*W.find_sym(['NQPMu'])) );
+                CATCH { $default := QAST::Op.new( :op('null') ) }
+            }
+            $default
+        }
+    }
+

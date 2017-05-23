@@ -1,0 +1,127 @@
+# /usr/bin/env/perl6
+
+my $s = slurp 'Ops.nqp';
+
+my &unlines = -> @a { join "\n"m @a }
+
+my @lines;
+for @lines {
+
+    s/\$ops\.add_hll_op\('(\w+)', '(\w+)'\V\-\> \$qastcomp\V+\}\H*/op $1:$0/; 
+    s/my \$(\w+)\V*fresh_(.)\(\)/reg $0:i/;
+    s/push.*?\:op\('(\w+')\),/$0/;
+    s:g/\$(\w+)_reg/$0/;
+    s/.*?release_register\N\n+/
+    s/(\V*)  push\(@ops, \$lbl_(\w+)/$0 :$1/;
+}
+$_ = unlines @lines;
+.say;
+
+
+
+  isnull, $isnull_result, $bind_res.result_reg;
+  if_i $isnull_result, $dont_return_lbl;
+  return_o $bind_res.result_reg;
+
+
+
+    QAST::Op.new(
+                    :op('callmethod'), :name('bind_sig'),
+                    QAST::WVal.new( :value($Binder) ),
+                    QAST::Op.new( :op('savecapture') ),
+                ), :want($MVM_reg_obj)
+            );
+
+
+
+
+The slast language purpose is to write code  without explicit use of the QAST API.
+But plenty of code
+is written using that very API. We don't want to manually convert that code to slast.
+So we design the SynTrans language that does syntaxical transforms.
+Here it is used
+to transform parts of a program using the QAST API into AST phasers.
+So as far as QAST is concerned, this language is intended to compile a unique program
+to generate the transformer program that does get rid of QAST API call.
+But we eventually intend to use SynTrans in a syntax aware editor.
+
+A sequence of rules defines the transforms.
+
+
+One transform is constituted of a parse tree pattern and its transformation.
+
+The transform will walk the parse tree and search patterns that apply,
+
+A parse tree pattern is represented by the string that lead to the parse tree
+with the exception of holes.
+To support patterns,  we just need to extend the grammar of the language in which the program is written.
+
+The transformed program will not be indented properly.
+We need to extend SynTrans to support intelligent indentation including vertical alignement
+of similar substructures in consecutive lines. 
+
+
+Variable with doubled sigil represented subtrees.
+Every pattern is an <EXPR> specialization
+
+
+  in colonpair  <identifier> <circumfix>  --> :pair( $$value )
+
+Need to generate rules for alternate syntax :
+   A.new  A.new()  A.new:
+
+
+The * matches a single argument while * matches zero or more
+
+On the replacement side *;*
+
+
+  QAST::Block.new( ** )                                          --> {{ *;* }}
+  QAST::Stmt.new( ** )                                           --> { *;*  }
+  QAST::Op.new( :op<bind>, $$to, $$from )                        --> $$to := $from
+  QAST::Op.new( :op<call>, :name($$name),  ** )                  --> $$name(**)
+  QAST::Op.new( :op<callmethod>, :name($$name), $$inv ** )       --> $$inv->$$name(**)
+  QAST::Wval.new( :value( $$wval ))                              --> WVal $$wval
+  QAST::Ival.new( :value( $$int  ))                              --> $$int
+         where $$int ~~ <int>
+  QAST::Nval.new( :value( $$int  ))                              --> $$int
+         where $$int ~~ <int>
+  QAST::Sval.new( :value( $$int  ))                              --> $$int
+         where $$int ~~ <int>
+  QAST::Ival.new( :value( $$ival  b )                             --> IVal $$val
+  QAST::Nval.new( :value( $$nval )                             --> IVal $$nval
+  QAST::Sval.new( :value( $$sval  )                             --> IVal $$ivl
+
+  QAST::Var.new( :name( $$var  ))                              --> $$var
+         where $$var ~~ s/ $ $<identifier> / $identifier /
+  QAST::Var.new( :name( $$var  ))                              --> Var $$var
+
+    :scope<lexical>  --> :lex
+    :decl<var>       --> :decl
+    :decl<param>     -->  :param
+  QAST::Var.new( :name($varr),  :decl<attribute>, *)  -->  $$var
+
+
+
+package typevar :returns positional
+
+    QAST::VarWithFallBack.new( :name( $$var  ) :scope<positional>, :$$fallback  --> $$var[*] || $$fallback
+    QAST::VarWithFallBack.new( :name( $$var  ) :scope<attribute>, :$$falback    --> $$var{*} || $$falback
+
+
+=head2 Matcher
+
+
+Matching a rule to a subtree.
+We assume no positional matching
+
+
+    my $code-tree;
+    my @rules;
+
+    $node
+    $_ : = rule;
+
+
+
+
