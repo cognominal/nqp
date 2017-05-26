@@ -1,0 +1,15 @@
+
+ast1 branch purpose.
+
+This is an incremental rewriting of slang ast, along with the atm slang and the
+sta slang. I now do it in parallel with the design and the implementation of atm
+and the design of a rule based utility (sta for source to ast) to convert code
+to ast slang and nqp-lite (see below). Also in my mind, nqp-lite, a nqp mode
+with a more readable syntax, will be in the nqp-lite branch. THe final move
+would be to convert everything to nqp-lite/atm/ast using sta.
+
+I want the 4 (ast, atm, sta, nqp-lite) to form a coherent whole.
+
+Also thinking of using ast and atm in macros and what would be the fall out.
+
+See doc/AST.pod for the specs that currently mostly focuses on ast slang
