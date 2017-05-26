@@ -1,0 +1,859 @@
+
+=head1 caveat emptor
+
+This document supposes you know NQP and the QAST API.  It is in state of flux
+so it contains both raw thoughts, inconsistencies and fossils.
+Parts of the doc that are more glossary like probably have a more consistent
+terminology.
+
+The implementation is not yet public or in very experimental form in dirty
+git branches in L<https://github.com/cognominal/nqp>. Pod formating is missing
+all over the place.  The document purposes are multiple. It will eventually turn
+into a user guide but it is currently geared at explaining the choices made and
+driving the implementation. It may still contain cryptic notes to my own usage.
+And here and there, there are apparently random code pastes that are or may prove relevant
+to the design or implementation.
+
+
+=head1 C<ast> and C<atm> : 2 slangs to deal with ASTs
+
+In the rakudo toolkit, like in other compiler toolkits, after a parsing pass, a
+compiler generates an abstract syntax tree (AST) and statically optimizes it.
+Downward operations are specific to the backend and are beyond the scope of this
+doc. By nature, the API to generate the AST is very regular and very verbose.
+Error prone to write and hard to read. Let us use slangs to the rescue !
+
+Slangs are Perl 6 parlance for DSL. Unlike most DSLs, many slangs can
+be artfully weaved within the main language.
+
+A good introduction to DSLs is
+https://www.dmst.aueb.gr/dds/pubs/jrnl/2000-JSS-DSLPatterns/html/dslpat.pdf.
+
+To generate an AST, we will use the C<ast> slang. To pattern match within an AST
+tree, we will use the C<atm> slang, atm meaning I<ast tree matching>. In these
+doc, we will suppose the main language to be nqp. Few modifications to the
+examples will be necessary to make it Perl 6.
+
+The ast and atm slangs are named after the phaser keyword that introduce them.
+
+We are starting very slowly, in a pointillist fashion which may frustrating
+to some. If you are not faint of heart, to catch the big picture go to
+directly L<Full fledged example>.
+
+Code in the ast slang is introduced by the phaser C<AST>
+    AST 42;
+
+We will often drop the C<QAST> to talk about the classes of
+the QAST API. So we will say C<IVal> instead of C<QAST::IVal>.
+
+Compiling C<AST::42> will result in executing code equivalent to
+
+   QAST::Op.new( :op<callmethod>, :name<new>,
+       QAST::Wval.new(:value(QAST::IVal),
+          QAST::IVal.new(:value(42))));
+
+Which will result in creating the code for generating an C<IVal>.
+
+     QAST::IVal.new(:value 42);
+
+
+Code in the atm slang is introduced by the phaser C<ATM>.
+
+    ATM 42;       # 1 if $_ is the QAST::Ival for 42
+    ATM $_ ~~ 42  # equivalent form
+
+Combining the two slangs, below, if the value of C<$_> is the
+C<IVal> for 42, we replace it by the evil C<IVal> for 666.
+
+    AST 666 if ATM 42
+
+The two slangs are deliberately similar even if one is aimed at generating ASTs
+while the other at matching them; or to be precise, ast slang is used to
+generate ASTs, while the atm slang pattern matches (part of) AST (sub)trees.
+Also, in the simplest cases, ast and atm syntaxes mimic nqp to make the learning
+curve less steep. As an intended result, ast and atm provides huffmanizations
+similar to nqp. But don't be fooled, ast is just a slang generating an AST, and
+atm to pattern match an AST.
+
+=head2 Some more examples of ast slang.
+
+ast slang can express QAST node either in short form or,
+if available for the given node type, in terse form.
+The normal form being using the QAST API instead of the
+ast slang.
+
+    AST 42          # terse form
+    AST IVal 42     # short form
+
+    # generates nqp::say(42)
+    AST say 42      # terse within terse
+    AST Op say 42   # terse with short
+
+    # generates say(42)
+    AST &say(42)    # terse within terse
+    AST Call say 42  # tricky, really an Op node
+
+C<nqp::> calls are more common than function calls so the syntax is shorter.
+
+=head3 Constructing piecemeal an ast
+
+   my $ast := AST 42;
+   AST say $ast;      # $ast is an NQP/Perl 6 variable interpolated in ast
+
+Within ast or atm. every code parsed by the NQP/Perl 6 rule C<Variable> can be
+interpolated just like it is in an double quoted expression. Here we interpolate
+a var containing an C<int>, so we must use a short form. A conversion is done,
+so we can pass a any value which is intify-able.
+
+    my int $i := 42;
+    AST say Ival $i;
+
+    my @a = (AST 1), (AST 2);
+    AST  &say(@a)
+
+=head2 Motivating example
+
+As a motivating and running example, we use a program with a dead branch
+and some of its variations.
+
+Below, the C<$french> variable is known at compile time
+so the program is equivalent to C<nqp::say $salut>.
+
+   const $french = 1;
+   nqp::say $french ?? 'salut' !! 'hi'
+
+The resulting tree is equivalent to the following one generated using
+the QAST API.
+
+   QAST::Op.new(:op<say>,
+       QAST::Op.new(:op<if>, QAST::IVal.new(:value(1),
+         QAST::SVal.new(:value<salut>), QAST::SVal.new(:value<hi>)))
+
+    AST if($french, 'salut', 'hi')
+
+Replacing the constant C<$french> by its value, the code becomes
+
+   AST say if 0,  'salut', 'hi'
+
+The ast slang provides syntactic sugar for opcodes that implement control flow
+
+   AST say     0 ??  'salut' !!  'hi'
+   AST say     if 0  { 'salut' } else { 'hi' }
+
+If we wanted to generate a call to the C<&say> function as opposed
+to the C<say> opcode we would have written:
+
+   AST &say(  0 ??  'salut' !!  'hi' )
+
+Now, let's do our faking of dead code elimination.
+
+   my $if :=  AST  0 ?? 'salut' !! 'hi' # generate the tree
+
+   $if := (ATM 0) ?? AST $if[1] !!  AST $if[2]                    # optimize it
+   $if := ATM 0   ??     $if[1] !!      $if[2];                   # same, smarter
+
+=head2 Some more splicing
+
+Splicing is used to pass information from the surrounding environment to the
+slang. Here it is an AST subtree, later the name of a variable to be generated,
+or a string to be interpolated in a double quoted string.
+
+   my $french = 1;
+   my $if :=  AST if $french { 'salut' } else { 'hi' }
+   $if := ATM 0 ?? $if[1] !! $if[2];
+
+The C<$french> variable is a compile time entity, In the generated tree a
+C<QAST::IVal> with value C<1> appears in its place. More example of variable
+interpolation in the ast slang.
+
+   my $op := 'say';
+   my $s  := 'Tom';
+   AST Op $op "hi $s"; # the opcode is given by the value of $op
+
+The last line is equivalent to
+
+   AST Op $op concat 'hi',   $s;
+   AST Op $op         'hi' ~ $s; # maybe
+
+Now, we want a function call
+
+   my $name := 'say';
+   AST Op :name($name) 'hi'
+
+
+   AST Call $name  'hi'
+   AST &$name  'hi'
+
+
+=head2 Generating a Var
+
+Now suppose C<$french> is a lexical variable to appe ar in the compiled source
+code. So it is now an altogether different beast which lives at a diferent time.
+There is still a dead branch, but to detect it one needs to do control flow
+analysis. It would prouve that $$french can only be 1 in the second statement.
+
+We would manually generate the code using
+
+   AST { bind( $$french :decl :my, 1);  if $$french { 'salut' } else { 'hi' }}
+
+We want the binding operation to standout. There is an obvious syntax for that.
+
+   AST { $$french :decl :my :=1; if $$french { 'salut' } else { 'hi' }}
+
+Note the doubled sigil in C<$$french>, even if the generated variable is
+C<$french>. Also note the bracing C<{ I<...> }>, an huffmanization to avoid an
+explicit C<Stmts( I<...> )>. A C<Block> would be written using double braces
+C<{{ I<...> }}>.
+
+The previous ast code is equivalent to the QAST code:
+
+ QAST::Stmts.new(
+   QAST::Op.new(:op<bind>,
+       QAST::Var.new(:name<$french>, :scope<lexical>, :decl<var>)),
+       QAST::IVal.new(:value(1)),
+   QAST::Op.new(:op<call>, :name<say>,
+       QAST::Op.new(:op<if>, QAST::Var.new(:name<$french>, :scope<lexical>),
+         QAST::SVal.new(:value<salut>), QAST::SVal.new(:value<hi>))))
+
+
+We don't need to hardcode the name of the generated var. Below it is passed as the
+value of $<lang>.
+
+     my $lang = 'french';
+     AST { $$lang :decl :my :name($lang) :=1;  if $$lang { 'salut' } else { 'hi' }}
+
+Also the syntax is streamlined.  C<:my> stands for the C<:scope<lexical>> and the
+C<:decl> stands for C<:decl<var>> while C<:param> would stand for C<:decl<param>.
+Also within an phaser, we don't need to repeat the adverb for a given variable
+because the phaseer remembers them.
+
+We can further streamline C<$$lang:name($lang)> into C<$$$lang>.
+
+We have hardly scratched the surface of our two slangs. But now, you know the
+gist of them. You should figure out from existing code. Also, to eat our own dog
+food, atm is implemented using many AST phasers. So tasty you want to carry the
+dog food in a doggy bag !
+
+The extensibility relies on the possibility to dynamically add new instructions
+to the bytecode. This can be done from a dynamically linked library.
+
+According to the L<water bed|https://en.wikipedia.org/wiki/Waterbed_theory>, the
+QAST API simplicity means: code using it is verbose. The analysis of existing
+code relying on the QAST API now allows to design a huffmanizing syntax.
+
+So Slast is part of an effort to huffmanize the compiler code. It does not
+affect what is generated. slast does not invalidate existing code. This spec
+also documents C<nqp-lite> and the C<atm> slang because, when possible, they use similar
+conventions.
+
+As any good DSL, slast huffmanizes special purpose code. This comes at
+the cost of learning additional conventions.  When dealing with code,
+the writer and reader are not bogged down with details irrelevant to
+them. Using the AST phaser, slast code is tightly weaved into an host
+language (HL) to generate ASTs for code compiled from a source
+language (SL).
+
+     code in source        HL with AST phasers
+     language         ------------------------------------->   QAST Tree
+
+slast appears
+
+=head1 Le mot et la chose
+
+We continue Jonathan's tradition to name programs using slavic names. Beside
+meaning I<B<sl>ang B<AST>>, Slast is czek for pleasure and is apparented to sladký,
+russian for sweet.  Slast is sweet indeed.
+Depensing on context, we use slast to denote the ast slang, or both ast and atm slangs.
+
+
+=head1 Full fledged example
+
+The first example is extreme because all C<QAST::Nodes> appears in their
+terse form, meaning their class name C<QAST::Op> does not appear.  Below
+C<hllize I<...>> is the terse form equivalent to the short form
+C<Op('hllize', I<...>)>.  With the QAST API, that would be
+C<QAST::Op.new(:op<hllize>, I<...>)>.
+We explain the example, glossing over many details.
+
+The example is a
+L<translation|https://github.com/rakudo/rakudo/blob/386905f6f62f9fa3525c887a8a86fa48b22b4b35/src/Perl6/Actions.nqp#L350-L368>
+tp slast of real code. That code generates code for the C<.^> operator.
+The four lines of the AST phaser replaces sixteen lines of bureaucratic QAST code.
+
+
+    register_op_desugar('p6callmethodhow', -> $qast {
+      $qast   := $qast.shallow_clone();
+      AST {
+        $$temp :decl :unique<how_invocant> := $qast.shift;
+        hllize (how $$temp)->($qast.name)($$temp, |$qast);
+      }
+    }
+
+
+The ast code is introduced by the AST phaser. It seamlessly mixes generated vars
+(genvars) and HL vars. Genvars slast names have doubled sigils to distinguish
+them from HL vars. Every HL postcircumfix expression appears directly in slast
+code. We recognize them because they start with an HL var name; here, this is
+true of C<$qast.shift> and C<$qast.name>.
+
+C<QAST::Op> nodes appears as simple fonction calls, here
+C<hllize> and C<how>. Their arguments don't need to be parenthesed.
+
+C<< $$temp :unique<how_invocant> >> creates a genvar declaration using
+C<QAST::Node.unique> to generate a unique genvar name from
+C<'how_invocant'>.
+
+When convenient, ast mimics the Perl 6 syntax albeit often with some variations.
+Here C<:=> stands for C<< QAST::Op.new(:op<bind>) >>; The C<< -> >> arrow stands
+for C<< QAST::Op.new(:name<methodcall>) >> and C<< {{ I<...> }} >> for a C<<
+QAST::Block.new(I<...>) >>. Note the C<< -> >> for generated method calls is
+often necessary to distinguish generated method calls from HL method calls.
+
+Finally, the stitching of QAST subtrees held by  HL vars is made easier with
+C<|$qast>, here to form the arguments of the method call.
+
+Finally, while concise, the slast expression is more explicit than its QAST API
+based counterpart because C<$qast.name> makes clear that the method name is set
+by the code which create C<$qast>. We could not use it if it was not set somewhere.
+
+=head2 round-tripping dumper
+
+slast comes with a dumper (TBD) so one can round trip. But looking at a dump,
+you would miss one slast defining feature, being driven by informations from
+the host language.
+
+A good syntax highlighter should use a different background for slast
+zones and revert to the normal background for HL sub-zones within slast.
+To reformulate a previous statement, these sub-zones are absent in a slast dump.
+Slast syntax is so slick these sub-zones don't need explicit splice syntax.
+
+=head1 Variables
+
+Slast is an AST generator language:
+
+=item with a concise syntax for expressing AST nodes
+=item driven by information from the host language
+
+In this section, we will gloss over the slast AST node syntax except for
+C<QAST::Var>s because, in the given examples, it will mirror the syntax of the
+source language so no introduction is necessary. We will focus on the fact that
+slast deals with two kind of variables: HL vars and generated C<QAST::Var>s.
+
+
+=head2 slast concept and vocabulary
+
+=for design
+Existing rakudo and nqp code with the QAST API repeat the scope at each var instance.
+We don't want that in slast.  C<decl> declares a new variable which is
+C<:> scope,  for register.  The kind of scope being open ended. So instead of
+C<reg $$a>, we write C<decl $$a :reg>, so we introduce only one
+keyword. Doc needs updating to reflect that change.
+braid as a verb or noun to denotes the interpenetration of different
+languages.
+I don't like the term host language. Host is used for VM and also for
+internet nodes.
+
+I<slast> is the language introduced by the C<AST> phaser to avoid the top heavy QAST
+API normally used to generate an AST tree.
+
+The I<source language> (SL) is the language which is compiled and for which
+slast generated a parse tree. I<source code> is code in source language.
+
+The I<host language> is the code in which the compiler code is written.
+Slast is breaded into the host language.
+
+A I<source var> is a var that explicitely appears in the source code.
+
+A I<HL var> is an host language var used within slast. It must be a
+lexical var with a sigil.  An HL var is used to pass information to
+slast.  An HL var is a compile time only entity.
+
+A I<source var> explicitely appears in the source language.
+
+A I<genvar> is a generated C<QAST::Var>. HLL like Perl 6 have
+many genvars wich have no direct source var counterpart.
+A genvar name may not have the morphology of a Perl
+variable name with a sigil.
+
+An I<SL var> is a slast language var. It is a device to talk about
+genvars   The slast code can be run many times during compilation so the
+denotated genvar var is well defined at a given time but can change over
+time. In other words many genvars can  be generated fron the same SL var.
+
+
+HL and SL vars start by a sigils, but the sigil is doubled in the SL vars,
+so they can be interpolated within a double
+quoted string. HL vars are interpolated at compile time while SL and genvars are
+at runtume.
+
+The SL var C<$$nominal> is used to create a a genvar named C<$nominal>.
+The genvar name is obtained by dropping a sigil from the SL var name.
+You may want to explicitely specify the genvar name.
+
+=head3 examples
+
+A fancy way to implement C<my $nominal = 'nominal; say "cog$nominal">.
+Sourced genvar C<$nominal> is automatically derived
+from SL var C<$$nominal>. HL var C<$cog> is interpolated at compile time.
+
+  my $cog = 'cog';
+  AST { $$nominal :decl := 'nominal'; say "$cog$$nominal }
+
+From the C<$$var> SL var, e generate thre genvars C<$zero One two>
+using the C<:name($_)> adverb.
+Not all of them have Perl 6 morphology.
+
+  my $i := 0;
+  my @asts;
+  push @asts, AST $var :name($_) :decl for  < $zero 0ne two >
+
+
+
+
+=head2 Some more examples using variables
+
+=note
+The HL var must be declared C<int>, C<num> or C<foo>
+or assumed to be a QAST::Node.
+
+Below is a previous example but with a variation.
+C<AST -{  I<...>  }> (note the dash) generates a
+C<Statements> node while C<AST { I<...> }> generates
+a C<Block> node outside the C<Statements> node. Probably
+the C<statement> node may be ommitted if the block contains
+only
+The C<:decl> adverb declares the variable. It would be
+C<:param>. The default scope is local, so here the C<:loc>
+adverbe is implit. It would be C<:my> for a lexical.
+
+   my $cog = 'cog';
+   AST = -{ $$nominal :decl := 'nominal';  say "$cog$$nominal" }
+
+
+This is equivalent to :
+
+    my $foo = 'cog';
+      QAST::Stmts.new(
+         QAST::Op.new(:op<bind>,
+           QAST::Var.new(:name<>, :decl<var>),
+           QAST::SVal.new(:value('nominal'))
+         ),
+         QAST::Op(:op<say>,
+           QAST::Op(:op<call>, :name< <&infix:<~> >>),
+             QAST::SVal.new(:value($foo)),
+             QAST::Var.new(:name<$bar>)
+      )
+    )
+
+In the previous example, the SL var name is  C<$$nominal>
+and the genvar name is  C<$nominal>. We can't derive genvar name
+from a SL var name if the later does not have Perl var morphology
+
+   my str $cog = 'cog';
+   AST {
+      $$nomonql :decl :local :genvar<?bork> ' := 'nominal';
+      say "$foo$$bar"
+   }
+
+   my str $cog = 'cog';
+   for 0..2 {
+      AST (
+        $$nomina :decl :unique := 'nominal';
+        say "$cog$$nominal";
+      )
+   }
+
+   my str $cog = 'cog';
+   AST (
+        $nominal_1 :decl := 'nominal1';
+        say "$cog$$nominal";
+        $$nominal_2 :decl := 'nominal2';
+        say "$cog$$nominal";
+      )
+   }
+
+
+We will say more about SL vars later. We just wanted to early hammer out the
+relationship between SL vars, HL vars and genvars.
+
+=head2 Double quoting
+
+slast double quoting is special because it handles interpolation of both HL and SL vars.
+No special syntax is needed. HL and SL vars start with a
+sigil.  Double quoting exceptional syntactical compactness makes it a
+powerful huffmanization device. It is double special in slast because
+we need to interpolate both HL vars and SL vars.  :s :a :h adverbs
+affects the interpolation of HL vars while their uppercase
+counterparts affects SL vars.
+
+    $a      HL var
+    $$a     SL var
+
+=begin implementation
+HLL::Grammar.quote_EXPR
+
+according to the received adverbs, C<quote_EXPR> sets C<%*QUOTEMOD> that is checked
+by C<quotemod_check> used as an assertion in
+rules of the category  quote_escape.
+
+
+
+    token quotemod_check(str $mod) {
+        <?{ %*QUOTEMOD{$mod} }>
+    }
+
+
+
+=end implementation
+
+Also, one should be able to say if a postcircumfix operator is SL or HL
+As in normal double quoting, parenthesis are needed in the last occurrence
+of chained method calls.
+
++        [ BVal | Block | CompUnit | CompileTimeValue | Ival | InLinePlaceHolder
++        | Nval | Op | ParamTypeCheck | Regex | Sval | SpecialArg | Stmt | Stmts | Unquote
++        | VM | Var | VarWitthFallback | Wval | Want ]
++    }
+
+
+=head2 SL and slast expressions
+
+One can splice HL code within slast code.
+Below the C<nqp::rand> is executed at compile time.
+
+   AST { $$a :decl := {{{ nqp::rand() }}};
+
+=head2 Method calls
+
+Assuming in slast C<$$a = 42> and in HL C<my $a = 33>
+C<$a> is SL var so it really translate to a constant at run time
+if not constant folded at during compile time or run time optimization.
+For the sake of the example, we suppose that the HL has <.perl> methods (which
+it has not!).
+
+  print $a.perl           # 33.perl
+  print $a.perl()         # 33         .perl executed at compile time
+  print $a->perl()        # 33         ->perl executed at run time
+  print $a->perl->perl()  # "33"       like .perl.perl executed at run time
+
+When chaining postcircumfix, if the invocant is a runtime entity, there is no
+way for the postcircumfix at its right be a compile time entity, so it must be a
+runtime one. Because there is no ambiguity for the attentive reader, t
+he C<< -> >> can be written as a C<.>.
+
+  print "$a->perl.perl()"  # "33"       like .perl.perl executed at run time
+  print "$$a->perl()"         42        -> ok
+  print "$$a.perl()"          42       ...but not needed, $$a is SL
+  print "$$a.perl.perl()"  # "42"      like $$a.perl.perl executed at run time
+
+
+=head1 Typical examples
+
+     $past := AST $lhs_ast->STORE: $rhs_ast :nosink
+
+     # without
+     $past := QAST::Op.new(
+        :op('callmethod'), :name('STORE'),
+        $lhs_ast, $rhs_ast);
+     $past.annotate('nosink', 1);
+
+     # with
+     #  NAST is a phaser, that adds generated code for :node($/)
+     NAST $node->words( autoderef => 1 )->Slip;
+
+     # without
+       QAST::Op.new(
+           :op('callmethod'),
+           :name('Slip'),
+           QAST::Op.new(
+               :op('callmethod'),
+               :name('words'),
+               :node($/),
+               $node,
+               QAST::IVal.new( :value(1), :named('autoderef') )
+           )
+       )
+
+
+
+=head1 simple examples for C<nqp::>, function and method calls
+
+In the examples. the SL is a nqp-ish language.
+
+   nqp::say('Hi!')                                      # SL
+   AST say('Hi!')                                       # slast
+   QAST::Op.new: :op<say>, QAST::SVal.new: :value<Hi!>  # AST
+
+   say('Hi!')
+   AST &say('Hi!')
+   QAST::Op.new: :op<call>, QAST::SVal.new: :value<Hi!>
+
+   'Hi!'.say
+   AST 'Hi!'->say
+   QAST::Op.new: :op<callmethod>, :name<say>, :value<Hi!>
+
+Using C<< -> >> to generate a method call lets us
+splice HL method calls in slast using C<.>, so without any syntactic overhead.
+
+
+=head2 HL variables and expressions within slast
+
+One can use HL variables to pass AST subtrees from the HL to the AST phaser.
+
+     my QAST::Node $ast = AST 'Hi!';
+     AST say($ast);
+
+In fact one can use any postcircumfix expression starting with a HL variable,
+the method call example mentionned before:
+
+     AST say $/<key>.ast
+
+This avoids to use an intermediary variable
+
+     my $ast := $/<key>.ast
+     AST say $ast
+
+or the top ugly explicit splicing
+
+     AST say {{{ $/<key>.ast }}}
+
+
+With a contextual prefix, one can pass a non AST value to the phaser that
+converts it to the type implied by the prefix to generate the appropriate QAST
+subtree:
+
+     my Str $str = 42;
+     AST say(+$str);
+
+Again, that works with HL postcircumfix expressions
+
+     AST +$/<key>
+
+=head2 SL variables
+
+Creating C<QAST::Var>s is easy too.
+
+   AST $$/->ast
+
+Code SL :
+     my $var-name := 42 ; nqp::say($var-name)
+
+
+=head2 SL var declarators and adverb
+
+:param>
+C<:lex>, C<:lexref>, C<:ocal>,  C<:attr>
+
+:flat, :slurpy
+
+
+=head2 unique vars
+
+
+We need unique vars that span AST expressions
+
+
+
+=head2 SL variable and lexpads
+
+When declared, infos about a var are automatically added to
+the current block symbol table, called a lexpad.
+Infos for subsquent instances of a var are looked in the englobing lexpads.
+
+By default a var scope is lexical and its decl attribute is var.
+
+C<XAST I<foo>> is short for C<self.cur_lexpad()[0].push: AST I<foo>>.
+
+
+=head2 Adverbs and node named parameters
+
+In an AST phaser, adverbs have the same syntax as Perl 6 but do not appear in the same position.
+Unlike adverbs, named parameters appear directly after a parenthesis or a comma.
+The C<< => >> syntax is reserved for generating pairs not adverbs, so
+the two forms are equivalent
+
+  AST key => 1
+  QAST::Ival(:value(1), :named(1))
+
+
+=head3 Node named parameters
+    my $say = 'say';
+    AST {{ :immediate Op($say, 42) :node($/) }}
+
+   NAST {{ :immediate Op($say, 42) }}
+
+=head3 Annotations as adverbs
+
+Annotation are expressed as adverbs
+
+     sub block_closure($code) {
+       AST $closure.p6capturelex($code->clone) :pasblock($code) :code_object($code)
+     }
+
+
+Literals generate the corresponding AST code.
+If you want a literal to be just that within slast, prefix it by the appropriate
+pseudo prefix.
+
+    :answer(42)     # the answer annotation is the AST for 42
+    :answer(+42)    # the answer annotation is 42
+
+    # the answer annotation is 42
+    my $int := 42;
+ l    AST $ast :answer(!+int)
+
+    # the answer annotation is the AST for 42
+    my $int := 42;
+    AST $ast :answer(+int)
+
+
+=head2 Annotated SL vars
+
+=note section to be fleshed out
+
+the code in parentheses for the value of the pair is implicitely spliced,
+it is SL code. Not AST code
+    AST $$/ :flat(1)
+
+In that case, we can use the pair syntax with the implicit 1 value
+
+    AST $$/ :flat
+
+Parentheses must be used to separate variable adverbs and expression annotation
+when the expression is an adverbed var.
+
+    AST ($/ :flat) :comment<a-match>
+
+=head2 Quick summary
+
+Within an AST phaser, vars and literals, with or without prefix, a summary:
+
+     42                    # generates the AST for 42
+     +42                   # really a literal
+     $var                  # no prefix. $var is a HL var containing an AST
+     +$var                 # cast a HL var to generate a QAST::IVal
+     !+$var                # casted HL var is used as is, say, in an annotation
+                           # with eponymous sigilname
+        $$var              # generates Var with name $$var
+        $$$var             # genereates VAR with name given by HL var $var
+          :unique<aname>          # name passed thru QAST::Node.unique
+     expr :note<foo>     # .annotate('note', 'foo')
+
+
+
+=head2 
+
+For simple code, slast code often deceptively looks like source code
+when AST phaser components can be expressed in their terse form.
+So far, we have only seen terse forms. Some AST nodes have no terse form,
+QAST::Op nodes have many.
+
+Node short forms are a simplified form of the corresponding QAST API
+with some parameters that were named becoming positional.
+
+Implementation note : probably, they will use a derived node type so that the new
+method will not use named parameters opening optimizing opportunities
+
+
+       AST 42                        # terse form
+       AST Ival(+42)                 # short form with positional
+       QAST::IVal.new(:value(42))
+
+So why a short form when a terse one is available ?
+When the node is dependent on HL vars, you must use the
+the short form.
+
+    nqp::say( 42 );                                     # source form
+    QAST::Op.new: :op<say>, QAST::IVal.new: :value(42)  # AST form
+    AST say 42;                                         # terse form
+    AST Op('say', +42)                                   # short form
+
+if the Op name is given by an HL variable, then he can't use the
+terse form
+
+    my $say = 'say'
+    AST Op(~$say, 42);  #  one must use the short form.
+
+
+=head2 correspondance between forms depending on node type
+
+       short form                                   source form       terse form
+       IVal(+42)                                     42                42
+       NVal(+42.0)                                   42.0              42.0
+       SVal(~'42')                                   '42'              '42'
+       WVal(Forty::Two)                             Forty::Two        Forty::Two
+                                                    { 42 }            {{ 42 }}
+       Stmts                                                          {  42  }
+       NodeList(...)                                                   [ ...  ]
+       Op('call', :name<&say>, +42)                 say(42)           &say(42)
+       Op('say', +42)                               nqp::say(42)      say(42)
+       Op('callmethod>' :name<&say>, +42)           42.say            42.say
+       Op('if', IVal(42), IVal(33), IVal(666))      42 ?? 33 !! 666   if 42 { 33 } else { 666 }
+
+A terse form may do more than the short form.
+For example the terse form for a block does execute a push_lexpad wich generated
+an AST with a QAST::Stmts withing QAST::Block witch is pushed on the lexpad
+stack.
+
+
+   nqp::bindattr($code_obj, $code_type, '$!clone_callback', nqp::null());
+   $code_obj.'$!clone_callback' ::= null
+
+
+when using annotation on a construct that uses adverbs,
+parenthesize that construct. Today this is only true of
+SL vars
+
+(\@ARGS :flat(1)) :an-annotation<annotated>
+
+NAST ...    NAST :node($/)
+
+
+=head2 fake node types
+
+The QAST has few node type and uses named parameters to distinguish
+subnode types. Slast allows but does not oblige to promote subnode types
+for sake of concision.
+
+   Op(:name<call>, 'say' ... )
+   Call(~'say', ... )
+   say()
+
+   MethodCall(~'say', ... )
+   Op(:name<say>,)
+
+   Regex( :rxtype(alt), ... )
+   RxAlt( ... )
+
+=head2 More huffmanizing for the win
+
+=note nqp-lite is another project.
+
+Often, combined with nqp-lite, slast allows to make code symmetry apparent.
+Below the two first actions use slast and nqp lite while the third is unchanged.
+Being unilines, it is easy to vertically align identical structures.
+
+      act backslash:sym<r>  { make can($/.CURSOR, 'parsing_heredoc')  ??  AST "\r"   !! "\r";     }
+      act backslash:sym<rn> { make can($/.CURSOR, 'parsing_heredoc')  ??  AST "\r\n" !! "\r\n";   }
+      method backslash:sym<t>($/) {
+          make nqp::can($/.CURSOR, 'parsing_heredoc')
+              ?? QAST::SVal.new( :value("\t") )
+              !! "\t";
+      }
+
+In the previous example C<act> made implicit the first parameter C<$/>. Here
+C<ast> additionally  drops the C<make> when the method is a simple slast
+expression.
+
+
+     ast metachar:sym<:my> { Regex( $parse :qastnode :declarative) }
+
+      # without.
+      method metachar:sym<:my>($/) {
+         my $past := $<statement>.ast;
+         make QAST::Regex.new( $past, :rxtype('qastnode'), :subtype('declarative') );
+     }
+
+The nast keyword is similar to the NAST phaser so one can drop the C<:node($/)>
+
+     nast metachar:sym<{ }> { Regex $<codeblock>.ast :qastnode }

@@ -78,6 +78,7 @@ COMMON_NQP_SOURCES  = \
   src/NQP/Optimizer.nqp \
   src/NQP/Actions.nqp \
   src/NQP/Compiler.nqp \
+  src/NQP/AST.nqp \
 
 NQP_COMBINED = NQP.nqp
 

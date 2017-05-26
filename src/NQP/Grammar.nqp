@@ -11,6 +11,10 @@ grammar NQP::Grammar is HLL::Grammar {
         %*LANG<Regex-actions> := NQP::RegexActions;
         %*LANG<MAIN>          := NQP::Grammar;
         %*LANG<MAIN-actions>  := NQP::Actions;
+        %*LANG<AST>           := AST::Grammar;
+        %*LANG<AST-actions>   := AST::Actions;
+        %*LANG<ATM>           := ATM::Grammar;
+        %*LANG<ATM-actions>   := ATM::Actions;
 
         # Package declarator to meta-package mapping. Note that there is
         # one universal KnowHOW from the 6model core, and an attribute
@@ -279,9 +283,11 @@ grammar NQP::Grammar is HLL::Grammar {
     rule statement_control:sym<CONTROL> { <sym>\s <block> }
 
     proto token statement_prefix { <...> }
-    token statement_prefix:sym<BEGIN> { <sym> <blorst> }
-    token statement_prefix:sym<INIT>  { <sym> <blorst> }
-    token statement_prefix:sym<try>   { <sym> <blorst> }
+    token statement_prefix:sym<BEGIN> { <sym> <blorst>   }
+    token statement_prefix:sym<INIT>  { <sym> <blorst>   }
+    token statement_prefix:sym<try>   { <sym> <blorst>   }
+    token statement_prefix:sym<AST>   { <sym> <ast_def>  }
+    token statement_prefix:sym<ATM>   { <sym> <atm_def>  }
 
     token blorst {
         [
@@ -540,6 +546,9 @@ grammar NQP::Grammar is HLL::Grammar {
         | <blockoid>
         ]
     }
+
+    rule ast_def { <ast_def=.LANG('AST', 'TOP')>   }
+    rule atm_def { <atm_def=.LANG('ATM', 'TOP')>   }
 
     rule method_def {
         :my $*RETURN_USED := 0;
