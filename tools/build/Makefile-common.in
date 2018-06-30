@@ -78,6 +78,7 @@ COMMON_NQP_SOURCES  = \
   src/NQP/Optimizer.nqp \
   src/NQP/Actions.nqp \
   src/NQP/Compiler.nqp \
+  src/NQP/AST.nqp \
 
 NQP_COMBINED = NQP.nqp
 
@@ -125,4 +126,3 @@ PROVE           = prove $(PROVE_OPTIONS)
 
 # nqp::makefile <-- tells NQP::Configure to treat this file as a makefile,
 #                   performing win32 slash and makefile conversions
-
