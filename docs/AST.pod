@@ -1,0 +1,4 @@
+=head1 slangs
+
+ast is a slang to generate QAST code.
+atm is a slang to match subtrees of QAST code.

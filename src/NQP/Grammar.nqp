@@ -5,6 +5,8 @@ grammar NQP::Grammar is HLL::Grammar {
 	    my $*LANG := self;
 	    self.define_slang('MAIN',  self,       self.actions);
 	    self.define_slang('Regex', NQP::Regex, NQP::RegexActions);
+        self.define_slang('AST', AST::Grammar, AST::Actions);
+        self.define_slang('ATM', ATM::Grammar, ATM::Actions);
 
         # Old language braids, going away.
         my %*LANG;
@@ -12,6 +14,9 @@ grammar NQP::Grammar is HLL::Grammar {
         %*LANG<Regex-actions> := NQP::RegexActions;
         %*LANG<MAIN>          := NQP::Grammar;
         %*LANG<MAIN-actions>  := NQP::Actions;
+        %*LANG<AST-actions>   := AST::Actions;
+        %*LANG<ATM>           := ATM::Grammar;
+        %*LANG<ATM-actions>   := ATM::Actions;
 
         # Package declarator to meta-package mapping. Note that there is
         # one universal KnowHOW from the 6model core, and an attribute
@@ -283,6 +288,8 @@ grammar NQP::Grammar is HLL::Grammar {
     token statement_prefix:sym<BEGIN> { <sym> <blorst> }
     token statement_prefix:sym<INIT>  { <sym> <blorst> }
     token statement_prefix:sym<try>   { <sym> <blorst> }
+    token statement_prefix:sym<AST>   { <sym> <ast_def>  }
+    token statement_prefix:sym<ATM>   { <sym> <atm_def>  }
 
     token blorst {
         [
@@ -322,7 +329,7 @@ grammar NQP::Grammar is HLL::Grammar {
         <multi_declarator>
     }
     token term:sym<regex_declarator>   { <regex_declarator> }
-	
+
     token term:sym<statement_prefix>   { <statement_prefix> }
     token term:sym<lambda>             { <?lambda> <pblock> }
     token term:sym<last>               { <sym> [<.ws> <identifier> <?{ $*W.is_lexical(~$<identifier>) }>]? { $*CONTROL_USED := 1 } }
@@ -524,6 +531,9 @@ grammar NQP::Grammar is HLL::Grammar {
     token initializer {
         ':=' <.ws> [ <EXPR('f=')> || <.panic: "Malformed binding"> ]
     }
+
+    rule ast_def { <ast_def=.LANG('AST', 'TOP')>   }
+    rule atm_def { <atm_def=.LANG('ATM', 'TOP')>   }
 
     proto rule routine_declarator { <...> }
     rule routine_declarator:sym<sub>    { <sym> <routine_def> }
