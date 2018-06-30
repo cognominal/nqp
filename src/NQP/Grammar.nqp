@@ -532,7 +532,7 @@ grammar NQP::Grammar is HLL::Grammar {
         ':=' <.ws> [ <EXPR('f=')> || <.panic: "Malformed binding"> ]
     }
 
-    rule ast_def { <ast_def=.LANG('AST', 'TOP')>   }
+    rule ast_def {  <ast_def=.LANG('AST', 'TOP')>   }
     rule atm_def { <atm_def=.LANG('ATM', 'TOP')>   }
 
     proto rule routine_declarator { <...> }

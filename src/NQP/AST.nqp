@@ -41,16 +41,32 @@ sub q-var($nm, :$scope = 'var', :$decl) {  QAST::Var.new(:name($nm), :scope($sco
 # for debug sake
 sub what($v) { $v.HOW.name($v) }
 sub swhat($v, $s = '') { print("$s : ") if $s; say(what($v)) }
+sub ad($ast, $t?) { say(($t ?? "$t" !! '') ~ $ast.dump); $ast }
 
 
 # placeholders for ast and atm grammars and actions
 
 role AST::Grammar-Common {
+    token value { <number> } # | <str >                                                    }
 }
 
 grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
+    my %methodop       := nqp::hash('prec', 'y=', 'assoc', 'unary');
+    my %comma          := nqp::hash('prec', 'g=', 'assoc', 'list', 'nextterm', 'nulltermish');
+
+    rule TOP                  {  <.ws> <EXPR>                                                 }
+    token term:sym<value>     { <value>                                                       }
+    token number              { [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>  }
+
 }
-grammar AST::Actions is HLL::Actions {
+
+class AST::Actions is HLL::Actions {
+        method TOP($/)                 { make $<EXPR>.ast;                                    }
+        method value($/)               { make $<str> ?? $<str>.ast !! $<number>.ast           }
+        method term:sym<value>($/)     { make $<value>.ast                                    }
+        method number($/)              { make qq-ival($/);                                    }
+
+
 }
 
 
