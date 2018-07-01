@@ -1,5 +1,5 @@
 # test file for ast and atm slangs
-plan(2);
+plan(15);
 
 sub compile_qast($qast) {
     my $*QAST_BLOCK_NO_CLOSE := 1;
@@ -29,5 +29,32 @@ sub test_qast_result($qast, $tester, $desc) {
     }
 }
 
+
 ok((AST 42).value == 42, 'AST 42');
 is_qast((AST 42), 42, 'AST 42');
+is_qast((AST (42)), 42, 'AST (42)');
+ok(nqp::istype((AST { 42 }), QAST::Block),  '(AST  {42}) is a QAST::Block');
+ok(nqp::istype((AST -{ 42 }), QAST::Stmts), '(AST -{42}) is a QAST::Stmts');
+ok(nqp::istype((AST Block 42 ), QAST::Block),  '(AST Block 42) is a QAST::Block');
+ok(nqp::istype((AST Stmts 42 ), QAST::Stmts),  '(AST Block 42) is a QAST::Stmts');
+# is_qast((AST Block :immediate 42 ), 42, 'AST Block 42' );
+
+
+#  Lots of sugar for splicing so as to avoid the crude : AST {{ an-nqp-expr }}
+# syntax highlighting should evenutally make clear what is spliced.
+
+my $ast-n := AST 42;
+my @ast-n := [AST 42];
+is_qast((AST {{$ast-n}}),    42,         'explicit splicing: AST {{$n}} with $n    := AST 42');
+is_qast((AST $ast-n),        42,         'implicit splicing: AST $ast-n     with $ast-n    := AST 42');
+is_qast((AST @ast-n[0]),     42,         'implicit splicing: AST @ast-n[0]  with @ast-n[0] := AST 42');
+
+# A short form on a leaf splices
+is_qast((AST IVal 42),   42,             'AST IVal 42');
+
+my $n := 42;
+is_qast((AST +42),            42,         'AST     +42');
+is_qast((AST IVal +42),       42,         'AST IVal +42');
+is_qast((AST IVal 31 + 11),   42,         'AST IVal 31 + 11');
+# is_qast((AST +$n),            42,         'AST      +$n');
+is_qast((AST IVal +$n),       42,         'AST IVal +$n');
