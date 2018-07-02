@@ -38,14 +38,20 @@ sub what($v) { $v.HOW.name($v) }
 sub swhat($v, $s = '') { print("$s : ") if $s; say(what($v)) }
 sub ad($ast, $t?) { say(($t ?? "$t" !! '') ~ $ast.dump); $ast }
 
-# placeholders for ast and atm grammars and actions
+# the categorization of classes derived from QAST::Node in leaves and not leaves is tentative
+my @nodes;
+my %leaves;
+my @leaves := < IVal NVal SVal Var VarWithFallBack WVal VM SpecialArgs CompileTimeValue
+                ParamTypeCheck NodeList Want >;
+my @non-leaves := < Block Stmt Stmts Op NodeList Unquote InlinePlaceHolder Regex >;
+nqp::push(@nodes, $_)       for @leaves;
+nqp::push(@nodes, $_)       for @non-leaves;
+nqp::bindkey(%leaves, $_, 1) for @leaves;
 
 role AST::Grammar-Common {
     token value { <number> } # | <str >                                                    }
+    token name  { <.LANG('MAIN', 'name')>                                                  }
 }
-
-my @nodes := < IVal NVal Block Stmts >;
-my %nodes :=  nqp::hash( 'IVal', 'value', 'NVal', 'value',  '...', '...' );
 
 grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
     my %methodop       := nqp::hash('prec', 'y=', 'assoc', 'unary');
@@ -64,7 +70,7 @@ grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
 
     rule term:sym<short>      {
         $<nm>=@nodes [
-            || <?{ %nodes{$<nm>}  }>    <nqp-EXPR=.LANG('MAIN', 'EXPR')>
+            || <?{ %leaves{$<nm>}  }>    <nqp-EXPR=.LANG('MAIN', 'EXPR')>
             ||  <EXPR>
         ]
     }
@@ -82,10 +88,10 @@ class AST::Actions is HLL::Actions {
     method term:sym<splice>($/)    { make $<nqp-EXPR>.ast                                    }
     method term:sym<var>($/)       { make $<nqp-var>.ast                                     }
     method term:sym<+>($/)         { make $<nqp-term>.ast                                    }
+    method term:sym<name>($/)      { }
 
     method term:sym<short>($/)         {
-        my $key := %nodes{~$<nm>};
-            if $key {
+        if $<nqp-EXPR> { # leaf node class
             my $ast := $<nqp-EXPR>.ast;
             $ast.named('value');
             make qq(~$<nm>, $ast);
