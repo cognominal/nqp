@@ -6,7 +6,10 @@ sub q-pair-value($val)   {  q-spair('value', $val)                      }
 sub q-spair($key, $val)  {  QAST::SVal.new(:named($key), :value(~$val))  }
 sub q-npair($key, $val)  {  QAST::NVal.new(:named($key), :value(+$val))  }
 sub q-ipair($key, $val)  {  QAST::IVal.new(:named($key), :value(+$val))  }
-sub qq-val($class, $val) {  qq($class, $class.new(:value($val), :named<value>)) }
+sub qq-val($class, $val) {
+#    say("dump\n" ~ $val.dump);
+    qq($class, $class.new(:value($val), :named<value>))
+}
 sub qq-ival($val) { qq-val(QAST::IVal, +$val) }
 sub qq-nval($val) { qq-val(QAST::NVal, +$val) }
 sub qq-sval($val) { qq-val(QAST::SVal, ~$val) }
@@ -15,12 +18,7 @@ sub qq-named-op($op, $nm, *@args, :$node) { qq-op($op,  q-spair('name', $nm), |@
 sub q-w() { q-var('$*W')  }
 sub q-var($nm, :$scope = 'var', :$decl) {  QAST::Var.new(:name($nm), :scope($scope))  }
 
-sub qq-wval($val, $search=0) {
-        $val :=  QAST::Op.new(:op<callmethod>, :name<find_sym>,
-           QAST::Op.new(:op<split>, QAST::SVal.new(:value(~$val))));
-#   $val := $*W.find_sym(nqp::split('::', ~$val))
-        qq-val(QAST::WVal, $val)
-}
+
 
 sub qq($class, *@args, :$node) {
     $class := ~$class if $class ~~ NQPMatch;
@@ -54,7 +52,7 @@ role AST::Grammar-Common {
 }
 
 grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
-    my %methodop       := nqp::hash('prec', 'y=', 'assoc', 'unary');
+    my %methodop       := nqp::hash('prec', 'y=', 'assoc',  'unary');
     my %symbolic_unary := nqp::hash('prec', 'v=', 'assoc', 'unary');
     my %comma          := nqp::hash('prec', 'g=', 'assoc', 'list', 'nextterm', 'nulltermish');
 
@@ -69,9 +67,12 @@ grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
     token term:sym<+>         { <sym>  <nqp-term=.LANG('MAIN', 'term')>                       }
 
     rule term:sym<short>      {
-        $<nm>=@nodes [
-            || <?{ %leaves{$<nm>}  }>    <nqp-EXPR=.LANG('MAIN', 'EXPR')>
-            ||  <EXPR>
+        [
+        ||  WVal  :!s $<immediate-find-sym>='^' <name>
+        ||  $<nm>=@nodes [
+                || <?{ %leaves{$<nm>}  }>    <nqp-EXPR=.LANG('MAIN', 'EXPR')>
+                ||  <EXPR>
+            ]
         ]
     }
 
@@ -88,10 +89,16 @@ class AST::Actions is HLL::Actions {
     method term:sym<splice>($/)    { make $<nqp-EXPR>.ast                                    }
     method term:sym<var>($/)       { make $<nqp-var>.ast                                     }
     method term:sym<+>($/)         { make $<nqp-term>.ast                                    }
-    method term:sym<name>($/)      { }
 
     method term:sym<short>($/)         {
-        if $<nqp-EXPR> { # leaf node class
+        if $<name> {
+            my $val := $<immediate-find-sym> ??
+                QAST::WVal.new( :value( $*W.find_sym(nqp::split('::', ~$<name>)))) !!
+                QAST::Op.new(:op<callmethod>, :name<find_sym>,
+                     QAST::Var.new(:name<$*W>, :scope<contextual>),
+                     QAST::Op.new(:op<split>, QAST::SVal.new(:value('::')), QAST::SVal.new(:value(~$<name>))));
+                make ad(qq(QAST::WVal, $val));
+        } elsif  $<nqp-EXPR> { # leaf classe
             my $ast := $<nqp-EXPR>.ast;
             $ast.named('value');
             make qq(~$<nm>, $ast);
