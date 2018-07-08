@@ -6,10 +6,7 @@ sub q-pair-value($val)   {  q-spair('value', $val)                      }
 sub q-spair($key, $val)  {  QAST::SVal.new(:named($key), :value(~$val))  }
 sub q-npair($key, $val)  {  QAST::NVal.new(:named($key), :value(+$val))  }
 sub q-ipair($key, $val)  {  QAST::IVal.new(:named($key), :value(+$val))  }
-sub qq-val($class, $val) {
-#    say("dump\n" ~ $val.dump);
-    qq($class, $class.new(:value($val), :named<value>))
-}
+sub qq-val($class, $val) {  qq($class, $class.new(:value($val), :named<value>)) }
 sub qq-ival($val) { qq-val(QAST::IVal, +$val) }
 sub qq-nval($val) { qq-val(QAST::NVal, +$val) }
 sub qq-sval($val) { qq-val(QAST::SVal, ~$val) }
@@ -46,49 +43,69 @@ nqp::push(@nodes, $_)       for @leaves;
 nqp::push(@nodes, $_)       for @non-leaves;
 nqp::bindkey(%leaves, $_, 1) for @leaves;
 
+
+my %methodop       := nqp::hash('prec', 'y=', 'assoc', 'unary');
+my %symbolic_unary := nqp::hash('prec', 'v=', 'assoc', 'unary');
+my %comma          := nqp::hash('prec', 'g=', 'assoc', 'list', 'nextterm', 'nulltermish');
+
+
+
 role AST::Grammar-Common {
-    token value { <number> } # | <str >                                                    }
-    token name  { <.LANG('MAIN', 'name')>                                                  }
+    token value   { <number> } # | <str >                                                         }
+    token name    { <.LANG('MAIN', 'name')>                                                       }
+
+    token args    { '(' ~ ')' <arglist>       | <arglist>                                         }
+    token arglist {  <.ws>  [   <EXPR('f=')>  | <?>        ]                                      }
+    proto token terminator { <...> }
+    token terminator:sym<;> { <?[;]> }
+    token terminator:sym<}> { <?[}]> }
 }
 
 grammar AST::Grammar is HLL::Grammar does AST::Grammar-Common {
-    my %methodop       := nqp::hash('prec', 'y=', 'assoc',  'unary');
-    my %symbolic_unary := nqp::hash('prec', 'v=', 'assoc', 'unary');
-    my %comma          := nqp::hash('prec', 'g=', 'assoc', 'list', 'nextterm', 'nulltermish');
+      rule TOP                  { <.ws> <EXPR>                                                      }
+      rule term:sym<block>      {  '{' ~ '}'  <EXPR>                                                }
+      rule term:sym<stmts>      { '-{' ~ '}'  <EXPR>                                                }
+      rule term:sym<parens>     {  '(' ~ ')'  <EXPR>                                                }
+      rule term:sym<splice>     { '{{' ~ '}}' <nqp-expr>                                            }
+      token term:sym<value>     { <value>                                                           }
+      token term:sym<var>       { <nqp-var=.LANG('MAIN', 'variable')>                               }
+      token number              { [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>      }
+      token term:sym<op>        { <!before @nodes> <ident> <args>                                   }
+      token term:sym<fun>       { '&'<ident>  <?before '(' > <args>                                 }
+      token term:sym<+>         { <sym>  <nqp-expr>                                                 }
+      token nqp-expr            { <nqp-expr=.LANG('MAIN', 'EXPR')>                                  }
+      rule term:sym<short>      {
+          [
+              ||  WVal #  :!s
+                  [ $<immediate-find-sym>='^' ]? <name>
+              ||  $<node-name>=@leaves      <nqp-expr>
+              ||  $<node-name>=@non-leaves  <EXPR>
 
-    rule TOP                  { <.ws> <EXPR>                                                  }
-    rule term:sym<block>      {  '{' <EXPR> '}'                                               }
-    rule term:sym<stmts>      { '-{' <EXPR> '}'                                               }
-    rule term:sym<parens>     {  '(' <EXPR> ')'                                               }
-    rule term:sym<splice>     { '{{' ~ '}}' <nqp-EXPR=.LANG('MAIN', 'EXPR')>                  }
-    token term:sym<value>     { <value>                                                       }
-    token term:sym<var>       { <nqp-var=.LANG('MAIN', 'variable')>                           }
-    token number              { [$<prefix>='+']? [$<min>='-']? <num=.LANG('MAIN', 'number')>  }
-    token term:sym<+>         { <sym>  <nqp-term=.LANG('MAIN', 'term')>                       }
-
-    rule term:sym<short>      {
-        [
-        ||  WVal  :!s $<immediate-find-sym>='^' <name>
-        ||  $<nm>=@nodes [
-                || <?{ %leaves{$<nm>}  }>    <nqp-EXPR=.LANG('MAIN', 'EXPR')>
-                ||  <EXPR>
-            ]
-        ]
-    }
-
+          ]
+      }
+      token infix:sym<,>        { <sym>  <O(|%comma, :op<list>)>                                    }
 }
 
 class AST::Actions is HLL::Actions {
-    method TOP($/)                 { make $<EXPR>.ast;                                       }
-    method value($/)               { make $<str> ?? $<str>.ast !! $<number>.ast              }
-    method term:sym<value>($/)     { make $<value>.ast                                       }
-    method number($/)              { make qq-ival($/);                                       }
-    method term:sym<block>($/)     { make qq( QAST::Block, $<EXPR>.ast)                      }
-    method term:sym<stmts>($/)     { make qq( QAST::Stmts, $<EXPR>.ast)                      }
-    method term:sym<parens>($/)    { make $<EXPR>.ast                                        }
-    method term:sym<splice>($/)    { make $<nqp-EXPR>.ast                                    }
-    method term:sym<var>($/)       { make $<nqp-var>.ast                                     }
-    method term:sym<+>($/)         { make $<nqp-term>.ast                                    }
+    method TOP($/)                 { make $<EXPR>.ast;                                            }
+    method value($/)               { make $<str> ?? $<str>.ast !! $<number>.ast                   }
+    method term:sym<value>($/)     { make $<value>.ast                                            }
+    method number($/)              { make qq-ival($/);                                            }
+    method term:sym<block>($/)     { make qq( QAST::Block, $<EXPR>.ast)                           }
+    method term:sym<stmts>($/)     { make qq( QAST::Stmts, $<EXPR>.ast)                           }
+    method term:sym<parens>($/)    { make $<EXPR>.ast                                             }
+    method term:sym<splice>($/)    { make $<nqp-expr>.ast                                         }
+    method term:sym<var>($/)       { make $<nqp-var>.ast                                          }
+    method nqp-expr($/)            { make $<nqp-expr>.ast                                         }
+    method term:sym<op>($/)        { make qq-op($<ident>,                         | $<args>.ast); }
+    method term:sym<fun>($/)       { make qq-op('call', q-pair-name("&$<ident>"), | $<args>.ast); }
+
+    method term:sym<+>($/)         {
+        my $ast := $<nqp-expr>.ast;
+        $ast.named('value');
+        make qq(QAST::IVal, $ast)
+    }
+
 
     method term:sym<short>($/)         {
         if $<name> {
@@ -97,16 +114,34 @@ class AST::Actions is HLL::Actions {
                 QAST::Op.new(:op<callmethod>, :name<find_sym>,
                      QAST::Var.new(:name<$*W>, :scope<contextual>),
                      QAST::Op.new(:op<split>, QAST::SVal.new(:value('::')), QAST::SVal.new(:value(~$<name>))));
-                make ad(qq(QAST::WVal, $val));
-        } elsif  $<nqp-EXPR> { # leaf classe
-            my $ast := $<nqp-EXPR>.ast;
-            $ast.named('value');
-            make qq(~$<nm>, $ast);
-        } else {
-            make qq(~$<nm>, $<EXPR>.ast);
+                make qq(QAST::WVal, $val);
+        } else  {
+            my $ast;
+            if $<nqp-expr> {
+               $ast := $<nqp-expr>.ast;
+                $ast.named('value');
+            } else {
+               $ast := $<EXPR>.ast;
+            }
+            $ast := qq(~$<node-name>, $ast);
+            make $ast
         }
     }
+    method args($/) { make $<arglist>.ast; }
+
+    method arglist($/) {
+        my @ast-args := [];
+        if $<EXPR> {
+            my $expr := $<EXPR>.ast;
+            if nqp::istype($expr, QAST::Op) && $expr.name eq '&infix:<,>' && !$expr.named {
+                for $expr.list { @ast-args.push($_); }
+            }
+            else { @ast-args.push($expr); }
+        }
+        make @ast-args;
+    }
 }
+
 
 
 grammar ATM::Grammar is HLL::Grammar does AST::Grammar-Common {

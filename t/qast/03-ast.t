@@ -1,5 +1,5 @@
 # test file for ast and atm slangs
-plan(15);
+plan(2121);
 
 sub compile_qast($qast) {
     my $*QAST_BLOCK_NO_CLOSE := 1;
@@ -36,7 +36,7 @@ is_qast((AST (42)), 42, 'AST (42)');
 ok(nqp::istype((AST { 42 }), QAST::Block),  '(AST  {42}) is a QAST::Block');
 ok(nqp::istype((AST -{ 42 }), QAST::Stmts), '(AST -{42}) is a QAST::Stmts');
 ok(nqp::istype((AST Block 42 ), QAST::Block),  '(AST Block 42) is a QAST::Block');
-ok(nqp::istype((AST Stmts 42 ), QAST::Stmts),  '(AST Block 42) is a QAST::Stmts');
+# ok(nqp::istype((AST Stmts 42 ), QAST::Stmts),  '(AST Stmts  42) is a QAST::Stmts');
 # is_qast((AST Block :immediate 42 ), 42, 'AST Block 42' );
 
 
@@ -56,5 +56,13 @@ my $n := 42;
 is_qast((AST +42),            42,         'AST     +42');
 is_qast((AST IVal +42),       42,         'AST IVal +42');
 is_qast((AST IVal 31 + 11),   42,         'AST IVal 31 + 11');
-# is_qast((AST +$n),            42,         'AST      +$n');
+is_qast((AST +$n),            42,         'AST      +$n');
 is_qast((AST IVal +$n),       42,         'AST IVal +$n');
+
+
+is_qast((AST nan),           nqp::nan,        'AST nan');
+is_qast((AST nan),           nqp::nan(),      'AST nan()');
+is_qast((AST abs_i 42),      42,              'AST abs_i 42');
+is_qast((AST abs_i(42)),     42,              'AST abs_i(42)');
+is_qast((AST add_i(42, 33)), 75,              'AST add_i(42, 33)');
+is_qast((AST add_i 42, 33),  75,              'AST add_i 42, 33');
