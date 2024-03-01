@@ -38,7 +38,7 @@ sub insertion_sort(@array, &compare) {
 
 # given a match $m, returns an array [submatch key, submatch] if
 # submatch unique and has the same span as the match.
-# or [submatch keys joines by '=', submatch] 
+# or [submatch keys joined by '=', submatch] 
 # if all non empty submatches have the same span as $m
 # if so push the key to @chunks
 # otherwise return a informative string
@@ -272,12 +272,12 @@ role NQPMatchRole is export {
 
 # push indented key possibly prefixed by grammar name
             nqp::push(@grammarNms, $curGrammarm);
-            my $hpos := $indent + nqp::chars($key);
+            my $hpos := $indent + nqp::chars($bundled_key);
             nqp::push(@chunks, nqp::x(' ', $indent));
             nqp::push( @chunks, "$bundled_key");
 
 # bundle keys with same span values even if $bundlep is false
-# we don't want many keys with the same span on different lines.
+# we don't want many keys with the same span on different lines in the dump.
             my $last_m := $m;
             my $mm     := $m;
             my $v      := $m;
@@ -333,14 +333,16 @@ role NQPMatchRole is export {
 
             $hpos := $hpos + nqp::chars($froms) + nqp::chars($tos) + 2;
             my $non_empty_hash := $ret eq 'different span';
-            nqp::push( @chunks, $non_empty_hash || $last_m.list ?? ":" !! ": ~");
+            nqp::push( @chunks, $non_empty_hash || $last_m.list ?? ":  " !! ": ~");
+            $hpos := $hpos + 3;
 # dump the beginning of the matched substring with proper alignment
+            my $wrap_at := 50;
             if $human_dump {
-                if $hpos < 30 {
-                    nqp::push( @chunks, nqp::x(' ', 30 - $hpos))
+                if $hpos < $wrap_at {
+                    nqp::push( @chunks, nqp::x(' ', $wrap_at - $hpos))
                 } else {
                     nqp::push( @chunks, "\n");
-                    nqp::push( @chunks, nqp::x(' ', 30));
+                    nqp::push( @chunks, nqp::x(' ', $wrap_at));
                 }
                 nqp::push( @chunks, '  #  ' );
                 my $s := $last_m.Str;
