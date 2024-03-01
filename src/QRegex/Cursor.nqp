@@ -19,8 +19,17 @@ sub insertion_sort(@array, &compare) {
 
 
     my sub sorted_key_value_pairs($v) {
+        return [] unless nqp::defined($v);
         my %h := $v.hash;
+        my @l := $v.list;
         my @kv;
+        if @l {
+            my $i := 0;
+            for @l {
+                nqp::push(@kv, [~$i, $_]);
+                $i := $i + 1;
+            }
+        }
         if %h {
             for %h {
                 my $k := $_.key;
@@ -196,7 +205,6 @@ role NQPMatchRole is export {
         return $s;
 
         my sub recurse($m) {
-            return 0 unless nqp::istype($m, Match);
             my $last_v;
             for sorted_key_value_pairs($m) {
                 my $key := $_[0];
