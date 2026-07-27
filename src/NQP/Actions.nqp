@@ -1452,8 +1452,22 @@ class NQP::Actions is HLL::Actions {
     }
 
     method term:sym<nqp::op>($/) {
-        my $op    := ~$<op>;
-        my @args  := $<args> ?? $<args>[0].ast.list !! [];
+        make self.make_nqp_op($/, ~$<op>, $<args>);
+        $/.prune;
+    }
+
+    method term:sym<nqp::const>($/) {
+        make QAST::Op.new( :op('const'), :name(~$<const>) );
+        $/.prune;
+    }
+
+    method term:sym<dash_op>($/) {
+        make self.make_nqp_op($/, ~$<op>, [$<args>]);
+        $/.prune;
+    }
+
+    method make_nqp_op($/, $op, $args) {
+        my @args := $args ?? $args[0].ast.list !! [];
         if $op eq 'handle' || $op eq 'handlepayload' {
             my int $i := 1;
             my int $n := nqp::elems(@args);
@@ -1462,14 +1476,7 @@ class NQP::Actions is HLL::Actions {
                 $i := $i + 2;
             }
         }
-        my $ast  := QAST::Op.new( :op($op), |@args, :node($/) );
-        make $ast;
-        $/.prune;
-    }
-
-    method term:sym<nqp::const>($/) {
-        make QAST::Op.new( :op('const'), :name(~$<const>) );
-        $/.prune;
+        QAST::Op.new( :op($op), |@args, :node($/) );
     }
 
     method term:sym<onlystar>($/) {

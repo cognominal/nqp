@@ -685,6 +685,15 @@ grammar NQP::Grammar is HLL::Grammar {
         'nqp::const::' $<const>=[\w+]
     }
 
+    # `foo-(...)` sugar for `nqp::foo(...)`. The dash must be immediately
+    # followed by `(` (no whitespace) so it can't be confused with ordinary
+    # subtraction like `foo - (1+2)` or `foo-1`. The op name must start with
+    # a letter or underscore (not a digit), so numeric subtraction like
+    # `10-(3+2)` is left alone.
+    token term:sym<dash_op> {
+        $<op>=[<[a..zA..Z_]> \w*] '-' <args>
+    }
+
     token term:sym<onlystar> {
         '{*}' <?ENDSTMT>
         [ <?{ $*MULTINESS eq 'proto' }> || <.panic: '{*} may only appear in proto'> ]
