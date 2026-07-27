@@ -1973,6 +1973,20 @@ my class MASTCompilerInstance {
                 ?? QAST::Op.new( :op('associative_bind'), |$node.list, $*BINDVAL)
                 !! QAST::Op.new( :op('associative_get'), |$node.list));
         }
+        elsif $scope eq 'positional_raw' || $scope eq 'positional_raw_i'
+                || $scope eq 'positional_raw_n' || $scope eq 'positional_raw_s' {
+            my str $suffix := $scope eq 'positional_raw' ?? '' !! nqp::substr($scope, -2);
+            return self.as_mast_clear_bindval($*BINDVAL
+                ?? QAST::Op.new( :op('bindpos' ~ $suffix), |$node.list, $*BINDVAL)
+                !! QAST::Op.new( :op('atpos' ~ $suffix), |$node.list));
+        }
+        elsif $scope eq 'associative_raw' || $scope eq 'associative_raw_i'
+                || $scope eq 'associative_raw_n' || $scope eq 'associative_raw_s' {
+            my str $suffix := $scope eq 'associative_raw' ?? '' !! nqp::substr($scope, -2);
+            return self.as_mast_clear_bindval($*BINDVAL
+                ?? QAST::Op.new( :op('bindkey' ~ $suffix), |$node.list, $*BINDVAL)
+                !! QAST::Op.new( :op('atkey' ~ $suffix), |$node.list));
+        }
         else {
             nqp::die("QAST::Var with scope '$scope' NYI");
         }

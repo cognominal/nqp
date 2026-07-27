@@ -796,6 +796,27 @@ grammar NQP::Grammar is HLL::Grammar {
         <O(|%methodop)>
     }
 
+    # `@a-[1]`/`%a-{'k'}`/`%a-<k>` sugar for `nqp::atpos`/`nqp::atkey` (and
+    # `nqp::bindpos`/`nqp::bindkey` on the LHS of an assignment) — the raw,
+    # representation-specific ops, not the generic `positional_get`/
+    # `associative_get` that plain `[ ]`/`{ }`/`< >` compile to. An optional
+    # `:i`/`:n`/`:s` marker right after the dash selects the native int/num/str
+    # variant (`atpos_i`, `atkey_n`, ...) instead of the object one.
+    token postcircumfix:sym<-[ ]> {
+        '-' [ ':' $<native>=<[ins]> ]? '[' <.ws> <EXPR> ']'
+        <O(|%methodop)>
+    }
+
+    token postcircumfix:sym<-{ }> {
+        '-' [ ':' $<native>=<[ins]> ]? '{' <.ws> <EXPR> '}'
+        <O(|%methodop)>
+    }
+
+    token postcircumfix:sym<-ang> {
+        '-' [ ':' $<native>=<[ins]> ]? <?[<]> <quote_EXPR: ':q'>
+        <O(|%methodop)>
+    }
+
     token postcircumfix:sym<( )> {
         '(' <.ws> <arglist> ')'
         <O(|%methodop)>

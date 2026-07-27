@@ -1608,6 +1608,22 @@ class NQP::Actions is HLL::Actions {
         make QAST::VarWithFallback.new( :scope('associative'), $<quote_EXPR>.ast, :fallback(default_for('$')) );
     }
 
+    method postcircumfix:sym<-[ ]>($/) {
+        make QAST::Var.new( :scope(self.raw_subscript_scope('positional_raw', $<native>)), $<EXPR>.ast );
+    }
+
+    method postcircumfix:sym<-{ }>($/) {
+        make QAST::Var.new( :scope(self.raw_subscript_scope('associative_raw', $<native>)), $<EXPR>.ast );
+    }
+
+    method postcircumfix:sym<-ang>($/) {
+        make QAST::Var.new( :scope(self.raw_subscript_scope('associative_raw', $<native>)), $<quote_EXPR>.ast );
+    }
+
+    method raw_subscript_scope($base, $native) {
+        $native ?? $base ~ '_' ~ ~$native !! $base
+    }
+
     method postcircumfix:sym<( )>($/) {
         make $<arglist>.ast;
     }
