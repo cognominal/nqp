@@ -351,7 +351,8 @@ class NQP::Optimizer {
     method visit_var($var) {
         my str $scope := $var.scope;
         if $scope eq 'attribute' || $scope eq 'positional' || $scope eq 'associative'
-                || nqp::eqat($scope, 'positional_raw', 0) || nqp::eqat($scope, 'associative_raw', 0) {
+                || nqp::eqat($scope, 'positional_raw', 0) || nqp::eqat($scope, 'associative_raw', 0)
+                || $scope eq 'dotty_attr' {
             self.visit_children($var);
         } else {
             my int $top := nqp::elems(@!block_var_stack) - 1;

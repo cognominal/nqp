@@ -812,7 +812,9 @@ class NQP::Actions is HLL::Actions {
                     $default := default_value_for_prim($prim_spec);
                 }
                 else {
-                    $/.panic("Only native types are currently supported/checked");
+                    # A class type: default to its (undefined) type object,
+                    # same as an uninitialized `has` attribute of that type.
+                    $default := QAST::WVal.new( :value($type) );
                 }
             }
             else {
@@ -1371,7 +1373,22 @@ class NQP::Actions is HLL::Actions {
 
     method dotty($/) {
         my $ast := $<args> ?? $<args>[0].ast !! QAST::Op.new( :node($/) );
-        if $<quote> {
+        if $<privattr> {
+            my str $name  := ~$<privattr><name>;
+            my str $sigil := ~$<privattr><sigil>;
+            if $<args> {
+                if nqp::chars($sigil) {
+                    $/.panic("Cannot use a sigil with a private method call; write '.!$name(...)' without one");
+                }
+                $ast.name('!' ~ $name);
+                $ast.op('callmethod');
+            }
+            else {
+                $sigil := '$' unless nqp::chars($sigil);
+                $ast := QAST::Var.new( :scope('dotty_attr'), :name($sigil ~ '!' ~ $name), :node($/) );
+            }
+        }
+        elsif $<quote> {
             $ast.unshift($<quote>.ast);
             $ast.op('callmethod');
         }

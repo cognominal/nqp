@@ -660,7 +660,8 @@ grammar NQP::Grammar is HLL::Grammar {
 
     token dotty {
         '.'
-        [ <longname=deflongname>
+        [ <privattr>
+        | <longname=deflongname>
         | <?['"]> <quote>
             [ <?[(]> || <.panic: "Quoted method name requires parenthesized arguments"> ]
         ]
@@ -669,6 +670,15 @@ grammar NQP::Grammar is HLL::Grammar {
         | <args>
         | ':' \s <args=.arglist>
         ]**0..1
+    }
+
+    # `.!name` (bare, sugar for `.!$name`), `.!$name`, `.!@name`, `.!%name`
+    # -- with no argument list, these are attribute access; with one
+    # (parens present, even empty), it's an ordinary private method call
+    # on a method named `!name` (a sigil together with an argument list
+    # is rejected in the actions, since it isn't meaningful there).
+    token privattr {
+        '!' $<sigil>=<[$@%]>? <name=.identifier>
     }
 
     token term:sym<self> { <sym> » }

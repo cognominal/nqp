@@ -1987,6 +1987,41 @@ my class MASTCompilerInstance {
                 ?? QAST::Op.new( :op('bindkey' ~ $suffix), |$node.list, $*BINDVAL)
                 !! QAST::Op.new( :op('atkey' ~ $suffix), |$node.list));
         }
+        elsif $scope eq 'dotty_attr' {
+            my @children := $node.list;
+            if nqp::elems(@children) != 1 {
+                nqp::die("dotty attribute access needs exactly 1 child (the invocant), got " ~ nqp::elems(@children));
+            }
+            my $invocant := @children[0];
+            my $class    := $invocant.returns;
+            my str $name := $node.name;
+            unless !nqp::isnull($class) && !($class =:= NQPMu) {
+                nqp::die("Cannot resolve the class for '$name' access; the invocant needs "
+                    ~ "a statically declared type (e.g. 'my ClassName \$var;')");
+            }
+            my str $suffix := '';
+            if nqp::eqat($name, '$', 0) {
+                my $attr;
+                for $class.HOW.attributes($class, :local(1)) {
+                    if $_.name eq $name {
+                        $attr := $_;
+                        last;
+                    }
+                }
+                unless nqp::defined($attr) {
+                    nqp::die("No such attribute '$name' in class " ~ $class.HOW.name($class));
+                }
+                if nqp::can($attr, 'type') {
+                    my int $prim := nqp::objprimspec($attr.type);
+                    $suffix := $prim == 1 ?? '_i' !! $prim == 2 ?? '_n' !! $prim == 3 ?? '_s' !! '';
+                }
+            }
+            my $classval := QAST::WVal.new( :value($class) );
+            my $nameval  := QAST::SVal.new( :value($name) );
+            return self.as_mast_clear_bindval($*BINDVAL
+                ?? QAST::Op.new( :op('bindattr' ~ $suffix), $invocant, $classval, $nameval, $*BINDVAL)
+                !! QAST::Op.new( :op('getattr' ~ $suffix), $invocant, $classval, $nameval));
+        }
         else {
             nqp::die("QAST::Var with scope '$scope' NYI");
         }
