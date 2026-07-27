@@ -396,18 +396,18 @@ An operator precedence parser.
 =end
 
     method EXPR(str $preclim = '', int :$noinfix = 0) {
-        my $here          := self.'!cursor_start_cur'();
-        my int $pos       := nqp::getattr_i($here, NQPMatch, '$!from');
+        my NQPMatch $here := self.'!cursor_start_cur'();
+        my int $pos       := $here.!from;
         my str $termishrx := 'termish';
         my @opstack;
         my @termstack;
-        my $termcur;
+        my NQPMatch $termcur;
         my $termish;
         my %termOPER;
         my @prefixish;
         my @postfixish;
-        my $wscur;
-        my $infixcur;
+        my NQPMatch $wscur;
+        my NQPMatch $infixcur;
         my $infix;
         my %inO;
         my str $inprec;
@@ -417,12 +417,12 @@ An operator precedence parser.
         my int $term_done;
 
         while 1 {
-            nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+            $here.!pos := $pos;
             $termcur := $here."$termishrx"();
-            $pos := nqp::getattr_i($termcur, NQPMatch, '$!pos');
-            nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+            $pos := $termcur.!pos;
+            $here.!pos := $pos;
             if $pos < 0 {
-                $here.panic('Missing required term after infix') if nqp::elems(@opstack);
+                $here.panic('Missing required term after infix') if elems-(@opstack);
                 return $here;
             }
 
@@ -430,40 +430,40 @@ An operator precedence parser.
 
             # Interleave any prefix/postfix we might have found.
             %termOPER := $termish;
-            %termOPER := nqp::atkey(%termOPER, 'OPER')
-                while nqp::existskey(%termOPER, 'OPER');
-            @prefixish  := nqp::atkey(%termOPER, 'prefixish');
-            @postfixish := nqp::atkey(%termOPER, 'postfixish');
+            %termOPER := %termOPER-<OPER>
+                while existskey-(%termOPER, 'OPER');
+            @prefixish  := %termOPER-<prefixish>;
+            @postfixish := %termOPER-<postfixish>;
 
-            unless nqp::isnull(@prefixish) || nqp::isnull(@postfixish) {
-                while nqp::elems(@prefixish) && nqp::elems(@postfixish) {
+            unless isnull-(@prefixish) || isnull-(@postfixish) {
+                while elems-(@prefixish) && elems-(@postfixish) {
                     my %preO     := @prefixish[0]<OPER><O>.made;
-                    my %postO    := @postfixish[nqp::elems(@postfixish)-1]<OPER><O>.made;
-                    my $preprec  := nqp::ifnull(nqp::atkey(%preO, 'sub'), nqp::ifnull(nqp::atkey(%preO, 'prec'), ''));
-                    my $postprec := nqp::ifnull(nqp::atkey(%postO, 'sub'), nqp::ifnull(nqp::atkey(%postO, 'prec'), ''));
+                    my %postO    := @postfixish[elems-(@postfixish)-1]<OPER><O>.made;
+                    my $preprec  := ifnull-(%preO-<sub>, ifnull-(%preO-<prec>, ''));
+                    my $postprec := ifnull-(%postO-<sub>, ifnull-(%postO-<prec>, ''));
 
                     if $postprec gt $preprec {
-                        nqp::push(@opstack, nqp::shift(@prefixish));
+                        push-(@opstack, shift-(@prefixish));
                     }
                     elsif $postprec lt $preprec {
-                        nqp::push(@opstack, nqp::pop(@postfixish));
+                        push-(@opstack, pop-(@postfixish));
                     }
                     elsif %postO<uassoc> eq 'right' {
-                        nqp::push(@opstack, nqp::shift(@prefixish));
+                        push-(@opstack, shift-(@prefixish));
                     }
                     elsif %postO<uassoc> eq 'left' {
-                        nqp::push(@opstack, nqp::pop(@postfixish));
+                        push-(@opstack, pop-(@postfixish));
                     }
                     else {
                         self.EXPR_nonassoc($here, ~@prefixish[0], ~@postfixish[0]);
                     }
                 }
-                nqp::push(@opstack, nqp::shift(@prefixish)) while nqp::elems(@prefixish);
-                nqp::push(@opstack, nqp::pop(@postfixish)) while nqp::elems(@postfixish);
+                push-(@opstack, shift-(@prefixish)) while elems-(@prefixish);
+                push-(@opstack, pop-(@postfixish)) while elems-(@postfixish);
             }
-            nqp::deletekey($termish, 'prefixish');
-            nqp::deletekey($termish, 'postfixish');
-            nqp::push(@termstack, nqp::atkey($termish, 'term'));
+            deletekey-($termish, 'prefixish');
+            deletekey-($termish, 'postfixish');
+            push-(@termstack, $termish-<term>);
 
             last if $noinfix;
 
@@ -472,18 +472,18 @@ An operator precedence parser.
             while $more_infix {
                 # Now see if we can fetch an infix operator
                 # First, we need ws to match.
-                nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+                $here.!pos := $pos;
                 $wscur := $here.ws();
-                $pos   := nqp::getattr_i($wscur, NQPMatch, '$!pos');
+                $pos   := $wscur.!pos;
                 if $pos < 0 {
                     $term_done := 1;
                     last;
                 }
 
                 # Next, try the infix itself.
-                nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+                $here.!pos := $pos;
                 $infixcur := $here.infixish();
-                $pos := nqp::getattr_i($infixcur, NQPMatch, '$!pos');
+                $pos := $infixcur.!pos;
                 if $pos < 0 {
                     $term_done := 1;
                     last;
@@ -492,7 +492,7 @@ An operator precedence parser.
 
                 # We got an infix.
                 %inO := $infix<OPER><O>.made;
-                $termishrx := nqp::ifnull(nqp::atkey(%inO, 'nextterm'), 'termish');
+                $termishrx := ifnull-(%inO-<nextterm>, 'termish');
                 $inprec := ~%inO<prec>;
                 $infixcur.panic('Missing infixish operator precedence')
                     unless $inprec;
@@ -501,19 +501,19 @@ An operator precedence parser.
                     last;
                 }
 
-                while nqp::elems(@opstack) {
-                    my %opO := @opstack[nqp::elems(@opstack)-1]<OPER><O>.made;
+                while elems-(@opstack) {
+                    my %opO := @opstack[elems-(@opstack)-1]<OPER><O>.made;
 
-                    $opprec := nqp::ifnull(nqp::atkey(%opO, 'sub'), nqp::atkey(%opO, 'prec'));
+                    $opprec := ifnull-(%opO-<sub>, %opO-<prec>);
                     last unless $opprec gt $inprec;
                     self.EXPR_reduce(@termstack, @opstack);
                 }
 
-                if nqp::isnull(nqp::atkey(%inO, 'fake')) {
+                if isnull-(%inO-<fake>) {
                     $more_infix := 0;
                 }
                 else {
-                    nqp::push(@opstack, $infix);
+                    push-(@opstack, $infix);
                     self.EXPR_reduce(@termstack, @opstack);
                 }
             }
@@ -521,10 +521,10 @@ An operator precedence parser.
 
             # if equal precedence, use associativity to decide
             if $opprec eq $inprec {
-                $inassoc := nqp::atkey(%inO, 'assoc');
+                $inassoc := %inO-<assoc>;
                 if $inassoc eq 'non' {
                     self.EXPR_nonassoc($infixcur,
-                        @opstack[nqp::elems(@opstack)-1]<OPER>.Str,
+                        @opstack[elems-(@opstack)-1]<OPER>.Str,
                         $infix.Str());
                 }
                 elsif $inassoc eq 'left' || $inassoc eq 'chain' {
@@ -532,26 +532,26 @@ An operator precedence parser.
                     self.EXPR_reduce(@termstack, @opstack);
                 }
                 elsif $inassoc eq 'list' {
-                    my $op1 := @opstack[nqp::elems(@opstack)-1]<OPER>.Str;
+                    my $op1 := @opstack[elems-(@opstack)-1]<OPER>.Str;
                     my $op2 := $infix.Str();
                     self.EXPR_nonlistassoc($infixcur, $op1, $op2) if $op1 ne $op2 && $op1 ne ':';
                 }
             }
 
-            nqp::push(@opstack, $infix); # The Shift
-            nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+            push-(@opstack, $infix); # The Shift
+            $here.!pos := $pos;
             $wscur := $here.ws();
-            $pos := nqp::getattr_i($wscur, NQPMatch, '$!pos');
-            nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
+            $pos := $wscur.!pos;
+            $here.!pos := $pos;
             return $here if $pos < 0;
         }
 
-        self.EXPR_reduce(@termstack, @opstack) while nqp::elems(@opstack);
+        self.EXPR_reduce(@termstack, @opstack) while elems-(@opstack);
 
-	    self.'!clone_match_at'(
-	        nqp::pop(@termstack),
-	        nqp::getattr_i($here, NQPMatch, '$!pos')
-	    ).'!reduce'('EXPR')
+        self.'!clone_match_at'(
+            pop-(@termstack),
+            $here.!pos
+        ).'!reduce'('EXPR')
     }
 
     method EXPR_reduce(@termstack, @opstack) {
